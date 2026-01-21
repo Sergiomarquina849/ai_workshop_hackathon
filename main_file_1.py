@@ -9,11 +9,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 
+
 # ===================== FUTURISTIC UI THEME =====================
 def inject_css():
     st.markdown("""
         <style>
-        /* ===== Animated Gradient Background ===== */
         body {
             background: linear-gradient(135deg, #0a0f26, #120a35, #1a0f50);
             background-size: 300% 300%;
@@ -26,8 +26,6 @@ def inject_css():
             50% {background-position: 100% 50%;}
             100% {background-position: 0% 50%;}
         }
-
-        /* ===== Floating Star Particles ===== */
         body::before {
             content: "";
             position: fixed;
@@ -44,8 +42,6 @@ def inject_css():
             from {transform: translateY(0px);}
             to {transform: translateY(-2000px);}
         }
-
-        /* ===== Feature Cards ===== */
         .feature-card {
             backdrop-filter: blur(12px);
             border-radius: 20px;
@@ -64,21 +60,17 @@ def inject_css():
             transform: scale(1.08) translateY(-8px);
             box-shadow: 0 0 35px rgba(137, 98, 255, 0.8);
         }
-
-        /* ===== Icon Styles ===== */
         .feature-icon {
             font-size: 3rem;
             display: block;
             margin-bottom: 10px;
             filter: drop-shadow(0px 0px 6px #fff);
         }
-
-        /* Card Color Coding */
         .chatbot-box { color:#7dd3fc !important; }
         .content-box { color:#a5b4fc !important; }
         .web-box { color:#fcd34d !important; }
+        .image-box { color:#bbf7d0 !important; }
 
-        /* ===== Inputs & Textareas ===== */
         textarea, .stTextInput>div>div>input {
             background:rgba(255,255,255,0.15)!important;
             border-radius:10px!important;
@@ -86,8 +78,6 @@ def inject_css():
             border:1px solid rgba(255,255,255,0.3)!important;
             box-shadow: inset 0 0 12px rgba(0,0,0,0.45);
         }
-
-        /* ===== Buttons ===== */
         .stButton>button {
             background: linear-gradient(135deg,#6D28D9,#4C1D95);
             color:white;
@@ -104,7 +94,6 @@ def inject_css():
             transform:translateY(-4px) scale(1.04);
             box-shadow:0 0 22px rgba(167,139,250,1);
         }
-
         h1, h2, h3 {
             color: #F3EFFA !important;
             text-shadow:0 0 10px rgba(166,130,255,0.7);
@@ -113,13 +102,14 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 
+
 # ===================== GOOGLE DRIVE =====================
 def get_drive_service():
     creds_info = st.secrets["gcp_service_account"]
     creds = service_account.Credentials.from_service_account_info(
         creds_info, scopes=["https://www.googleapis.com/auth/drive.file"]
     )
-    return build('drive', 'v3', credentials=creds)
+    return build('drive','v3',credentials=creds)
 
 def upload_to_drive(filename, text):
     service = get_drive_service()
@@ -131,6 +121,7 @@ def upload_to_drive(filename, text):
         fields='id,name'
     ).execute()
     return file.get('id'), file.get('name')
+
 
 
 # ===================== WEBSITE ANALYZER =====================
@@ -149,16 +140,16 @@ def analyze_website(url, client):
 Analyze this website content.
 
 If placement/career info exists:
-- Extract the stats & summarize
+- Extract stats & summarize
 
 Else:
 - Summarize purpose
-- Explain key sections
-- Explain offerings
+- Key sections
+- Key offerings
 
 Rules:
 - No justification
-- No mentioning absence
+- No absence mentions
 - Only bullet points
 
 Content:
@@ -174,7 +165,8 @@ Content:
         return f"❌ Error: {e}"
 
 
-# ===================== STREAMLIT SETUP =====================
+
+# ===================== STREAMLIT APP =====================
 st.set_page_config(page_title="Honnagiri Multi Tool", page_icon="🚀", layout="wide")
 inject_css()
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -193,7 +185,7 @@ if st.session_state.page=="welcome":
 
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
-    c1,c2,c3 = st.columns(3)
+    c1,c2,c3,c4 = st.columns(4)
 
     with c1:
         st.markdown("<div class='feature-card chatbot-box'><span class='feature-icon'>🤖</span>Chatbot</div>", unsafe_allow_html=True)
@@ -202,16 +194,22 @@ elif st.session_state.page=="menu":
 
     with c2:
         st.markdown("<div class='feature-card content-box'><span class='feature-icon'>📝</span>Content Generator</div>", unsafe_allow_html=True)
-        if st.button("Generate"):
+        if st.button("Generate Content"):
             st.session_state.page="content"
 
     with c3:
         st.markdown("<div class='feature-card web-box'><span class='feature-icon'>🌍</span>Website Analyzer</div>", unsafe_allow_html=True)
-        if st.button("Analyze"):
+        if st.button("Analyze Website"):
             st.session_state.page="analyzer"
+
+    with c4:
+        st.markdown("<div class='feature-card image-box'><span class='feature-icon'>🖼</span>Text → Image</div>", unsafe_allow_html=True)
+        if st.button("Image Generator"):
+            st.session_state.page="image"
 
     if st.button("🔙 Exit"):
         st.session_state.page="welcome"
+
 
 
 elif st.session_state.page=="chatbot":
@@ -232,12 +230,11 @@ elif st.session_state.page=="chatbot":
         st.session_state.page="menu"
 
 
+
 elif st.session_state.page=="content":
     st.title("📝 Honnagiri Content Generator")
-
     topic = st.text_input("🧾 What content do you need?")
     audience = st.text_input("🎯 Who is the audience?")
-
     if st.button("✨ Generate"):
         prompt = f"Write engaging marketing content about '{topic}' for the target audience '{audience}'."
         r = client.chat.completions.create(
@@ -257,17 +254,30 @@ elif st.session_state.page=="content":
         st.session_state.page="menu"
 
 
+
 elif st.session_state.page=="analyzer":
     st.title("🌍 Universal Website Analyzer")
-
     url = st.text_input("🔗 Enter website URL:")
     if st.button("📡 Analyze"):
         if url:
             with st.spinner("Analyzing webpage..."):
-                output = analyze_website(url, client)
-                st.write(output)
+                st.write(analyze_website(url, client))
         else:
             st.warning("Enter a valid URL.")
+    if st.button("🔙 Back"):
+        st.session_state.page="menu"
+
+
+
+elif st.session_state.page=="image":
+    st.title("🖼 Text → Image Generator")
+    prompt = st.text_input("🎨 Enter a description for the image:")
+    if st.button("🎆 Generate Image"):
+        if prompt:
+            img_url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
+            st.image(img_url, caption="Generated Image")
+        else:
+            st.warning("Enter a valid prompt!")
 
     if st.button("🔙 Back"):
         st.session_state.page="menu"
