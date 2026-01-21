@@ -1,7 +1,13 @@
 import streamlit as st
-import requests
-import pandas as pd
 from groq import Groq
+import pandas as pd
+import requests
+import io
+
+# Google Drive Upload Imports
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
 # ===== CUSTOM CSS FOR COLORFUL UI =====
 def inject_css():
@@ -45,17 +51,36 @@ def inject_css():
         </style>
     """, unsafe_allow_html=True)
 
-# ===== CONTENT GENERATOR FUNCTION =====
-def generate_content(product, audience):
-    return f"""
-📝 **Generated Marketing Content**
 
-🌟 **Product:** {product}  
-🎯 **Audience:** {audience}  
+# ===== GOOGLE DRIVE SERVICE ACCOUNT LOGIC =====
+def get_drive_service():
+    creds_info = st.secrets["gcp_service_account"]
+    creds = service_account.Credentials.from_service_account_info(
+        creds_info,
+        scopes=["https://www.googleapis.com/auth/drive.file"]
+    )
+    return build('drive', 'v3', credentials=creds)
 
-✨ Introducing **{product}**, perfectly crafted for **{audience}**.  
-Designed to meet expectations with quality, elegance, and performance!
-"""
+
+def upload_to_drive(filename, text_content):
+    service = get_drive_service()
+
+    metadata = {
+        'name': filename,
+        'mimeType': 'text/plain'
+    }
+
+    fh = io.BytesIO(text_content.encode('utf-8'))
+    media = MediaIoBaseUpload(fh, mimetype='text/plain', resumable=True)
+
+    file = service.files().create(
+        body=metadata,
+        media_body=media,
+        fields='id, name'
+    ).execute()
+
+    return file.get('id'), file.get('name')
+
 
 # ===== DATA ANALYSIS FUNCTION =====
 def analyze_data_from_url(url):
@@ -71,19 +96,24 @@ def analyze_data_from_url(url):
     except Exception as e:
         return {"error": str(e)}, None
 
-# ===== STREAMLIT UI START =====
+
+# ===== STREAMLIT INITIAL CONFIG =====
 st.set_page_config(page_title="Multi Tool App", page_icon="🚀", layout="wide")
 inject_css()
 
-# Groq Client Init
+# Init Groq Client
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Session state init
+# Session State
 if "page" not in st.session_state:
     st.session_state.page = "welcome"
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+if "generated_text" not in st.session_state:
+    st.session_state.generated_text = ""
+
 
 # ===== WELCOME PAGE =====
 if st.session_state.page == "welcome":
@@ -91,6 +121,7 @@ if st.session_state.page == "welcome":
     st.markdown("### Your all-in-one creative, AI-powered tool!")
     if st.button("🚀 Start"):
         st.session_state.page = "menu"
+
 
 # ===== MENU PAGE =====
 elif st.session_state.page == "menu":
@@ -103,22 +134,22 @@ elif st.session_state.page == "menu":
             st.session_state.page = "chatbot"
 
     with col2:
-        st.markdown('<div class="menu-card">📝<br><b>Content Generator</b><br>Create text fast!</div>', unsafe_allow_html=True)
+        st.markdown('<div class="menu-card">📝<br><b>Content Generator</b><br>Export to Drive</div>', unsafe_allow_html=True)
         if st.button("Open Generator"):
             st.session_state.page = "content"
 
     with col3:
-        st.markdown('<div class="menu-card">📊<br><b>Compare & Analyze Data</b><br>From URL link</div>', unsafe_allow_html=True)
+        st.markdown('<div class="menu-card">📊<br><b>Analyze Data</b><br>From CSV URL</div>', unsafe_allow_html=True)
         if st.button("Analyze Data"):
             st.session_state.page = "compare"
 
     if st.button("🔙 Back to Welcome"):
         st.session_state.page = "welcome"
 
-# ===== CHATBOT PAGE (UPDATED WITH GROQ) =====
+
+# ===== CHATBOT PAGE =====
 elif st.session_state.page == "chatbot":
     st.title("🤖 AI Chatbot (Powered by Groq)")
-
     user_msg = st.text_input("💬 Type your message:")
 
     if user_msg:
@@ -132,7 +163,6 @@ elif st.session_state.page == "chatbot":
         bot_reply = response.choices[0].message.content
         st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
 
-    # Display chat history
     for chat in st.session_state.chat_history:
         if chat["role"] == "user":
             st.markdown(f"**🧑 You:** {chat['content']}")
@@ -142,34 +172,62 @@ elif st.session_state.page == "chatbot":
     if st.button("🔙 Back"):
         st.session_state.page = "menu"
 
-# ===== CONTENT GENERATOR PAGE =====
+
+# ===== CONTENT GENERATOR PAGE (UPDATED AS PER YOUR CODE) =====
 elif st.session_state.page == "content":
-    st.title("📝 Content Generator")
-    product = st.text_input("📦 Enter Product Name:")
-    audience = st.text_input("🎯 Enter Target Audience:")
-    if st.button("✨ Generate Content"):
-        if product and audience:
-            st.success(generate_content(product, audience))
-        else:
-            st.warning("⚠ Please fill both fields!")
+    st.title("📢 PragyanAI Marketing Content Generator (Google Drive Export)")
+    st.info("Files will be uploaded to the service account's Google Drive.")
+
+    product = st.text_input("Product / Service Name")
+    audience = st.text_input("Target Audience")
+    tone = st.selectbox("Tone", ["Professional", "Casual", "Exciting"])
+
+    if st.button("Generate Content"):
+        prompt = f"Create marketing content for:\nProduct: {product}\nAudience: {audience}\nTone: {tone}\n\nGenerate: 1. Ad copy 2. Email subject 3. LinkedIn post"
+
+        with st.spinner("Brainstorming..."):
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            st.session_state.generated_text = response.choices[0].message.content
+
+    if st.session_state.generated_text:
+        st.subheader("✨ Generated Content")
+        st.text_area("Preview", st.session_state.generated_text, height=200)
+
+        file_name = st.text_input("File name to upload (e.g. marketing.txt)", value="marketing.txt")
+
+        if st.button("Upload to Google Drive"):
+            try:
+                with st.spinner("Uploading..."):
+                    file_id, name = upload_to_drive(file_name, st.session_state.generated_text)
+                    st.success(f"✅ File '{name}' uploaded successfully!")
+                    st.write(f"🔗 File ID: `{file_id}`")
+            except Exception as e:
+                st.error(f"❌ Upload failed: {e}")
+
     if st.button("🔙 Back"):
         st.session_state.page = "menu"
 
+
 # ===== DATA ANALYSIS PAGE =====
 elif st.session_state.page == "compare":
-    st.title("📊 Compare & Analyze Data")
+    st.title("📊 Analyze CSV from URL")
     url = st.text_input("🔗 Enter CSV URL:")
+
     if st.button("📂 Analyze Data"):
         if url:
-            result, dataframe = analyze_data_from_url(url)
-            if dataframe is not None:
+            result, df = analyze_data_from_url(url)
+            if df is not None:
                 st.subheader("📌 Summary")
                 st.json(result)
                 st.subheader("📄 Preview")
-                st.dataframe(dataframe.head())
+                st.dataframe(df.head())
             else:
                 st.error(result.get("error"))
         else:
             st.warning("⚠ URL cannot be empty!")
+
     if st.button("🔙 Back"):
         st.session_state.page = "menu"
