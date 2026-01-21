@@ -1,9 +1,8 @@
 import streamlit as st
 from groq import Groq
-import pandas as pd
-import io
 import requests
 from bs4 import BeautifulSoup
+import io
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -40,32 +39,30 @@ def inject_css():
             color: white;
             border: 2px solid rgba(255,255,255,0.3);
             cursor: pointer;
-            transition: 0.35s ease;
+            transition: .35s;
             box-shadow: 0 0 12px rgba(255,255,255,0.25);
         }
         .feature-card:hover {
             transform: scale(1.05) translateY(-6px);
             box-shadow: 0 0 25px rgba(255,255,255,0.6);
         }
-        .chatbot-box { background: linear-gradient(135deg, #6A11CB, #2575FC); }
-        .content-box { background: linear-gradient(135deg, #00B4DB, #0083B0); }
-        .web-box { background: linear-gradient(135deg, #FF8008, #FFC837); color: #2B2B2B !important; }
+        .chatbot-box { background: linear-gradient(135deg,#6A11CB,#2575FC); }
+        .content-box { background: linear-gradient(135deg,#00B4DB,#0083B0); }
+        .web-box { background: linear-gradient(135deg,#FF8008,#FFC837); color:#222; }
 
         .stButton>button {
-            background: linear-gradient(135deg, #5118C4, #A020F0);
-            color: white;
-            padding: 12px 26px;
-            border-radius: 10px;
-            border: none;
-            transition: 0.3s;
-            font-size: 16px;
+            background: linear-gradient(135deg,#5118C4,#A020F0);
+            color:white; padding:12px 26px;
+            border-radius:10px; border:none;
+            font-size:16px; transition:.3s;
         }
-        .stButton>button:hover { transform: scale(1.05); }
+        .stButton>button:hover { transform:scale(1.05); }
+
         textarea, .stTextInput>div>div>input {
-            background: rgba(255,255,255,0.15)!important;
-            border-radius: 10px!important;
-            color: #E6E6FA!important;
-            border: 1px solid rgba(255,255,255,0.3)!important;
+            background:rgba(255,255,255,0.15)!important;
+            border-radius:10px!important;
+            color:#E6E6FA!important;
+            border:1px solid rgba(255,255,255,0.3)!important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -77,54 +74,53 @@ def get_drive_service():
     creds = service_account.Credentials.from_service_account_info(
         creds_info, scopes=["https://www.googleapis.com/auth/drive.file"]
     )
-    return build('drive', 'v3', credentials=creds)
+    return build('drive','v3',credentials=creds)
 
-def upload_to_drive(filename, text_content):
+def upload_to_drive(filename, text):
     service = get_drive_service()
-    metadata = {'name': filename, 'mimeType': 'text/plain'}
-    fh = io.BytesIO(text_content.encode('utf-8'))
+    fh = io.BytesIO(text.encode('utf-8'))
     media = MediaIoBaseUpload(fh, mimetype='text/plain', resumable=True)
-    file = service.files().create(body=metadata, media_body=media, fields='id,name').execute()
+    file = service.files().create(
+        body={'name': filename, 'mimeType':'text/plain'},
+        media_body=media,
+        fields='id,name').execute()
     return file.get('id'), file.get('name')
 
 
 # ===================== WEBSITE ANALYZER =====================
 def extract_visible_text(html):
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "meta", "noscript", "header", "footer", "nav"]):
-        tag.decompose()
+    soup = BeautifulSoup(html,"html.parser")
+    for t in soup(["script","style","meta","header","nav","footer","noscript"]):
+        t.decompose()
     return " ".join(soup.stripped_strings)
 
 def analyze_website(url, client):
     try:
         response = requests.get(url, timeout=10)
-        html = response.text
-        text = extract_visible_text(html)[:6000]
+        text = extract_visible_text(response.text)[:6000]
 
         prompt = f"""
-Analyze the website content below.
+Analyze this website content.
 
 If placement/career info exists:
-- Extract recruitment stats and summary
+- Extract the stats & summarize
 
 Else:
-- Summarize the website purpose
-- Highlight key sections
-- Highlight functionality
+- Summarize purpose
+- Explain key sections
+- Explain offerings
 
 Rules:
 - No justification
-- No mentioning absence of info
+- No mentioning absence
 - Only bullet points
 
-Website Content:
-\"\"\"
-{text}
-\"\"\"
+Content:
+\"\"\"{text}\"\"\"
 """
         r = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role":"user","content":prompt}]
         )
         return r.choices[0].message.content
 
@@ -135,96 +131,93 @@ Website Content:
 # ===================== STREAMLIT =====================
 st.set_page_config(page_title="Honnagiri Multi Tool", page_icon="🚀", layout="wide")
 inject_css()
+
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-if "page" not in st.session_state:
-    st.session_state.page = "welcome"
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "generated_text" not in st.session_state:
-    st.session_state.generated_text = ""
+if "page" not in st.session_state: st.session_state.page="welcome"
+if "chat_history" not in st.session_state: st.session_state.chat_history=[]
+if "generated_text" not in st.session_state: st.session_state.generated_text=""
 
 
 # ===================== PAGES =====================
-if st.session_state.page == "welcome":
+if st.session_state.page=="welcome":
     st.title("🌌 Welcome to Honnagiri Universe Tools")
-    if st.button("🚀 Enter the Portal"):
-        st.session_state.page = "menu"
+    if st.button("🚀 Start"):
+        st.session_state.page="menu"
 
+elif st.session_state.page=="menu":
+    st.title("🪐 Choose Your Tool")
+    c1,c2,c3 = st.columns(3)
 
-elif st.session_state.page == "menu":
-    st.title("🪐 Choose Your Cosmic Tool")
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
+    with c1:
         st.markdown("<div class='feature-card chatbot-box'>🤖<br>Chatbot</div>", unsafe_allow_html=True)
-        if st.button("Open Chatbot"):
-            st.session_state.page = "chatbot"
+        if st.button("Chat"):
+            st.session_state.page="chatbot"
 
-    with col2:
+    with c2:
         st.markdown("<div class='feature-card content-box'>📝<br>Content Generator</div>", unsafe_allow_html=True)
-        if st.button("Open Generator"):
-            st.session_state.page = "content"
+        if st.button("Generate Content"):
+            st.session_state.page="content"
 
-    with col3:
+    with c3:
         st.markdown("<div class='feature-card web-box'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
-        if st.button("Analyze Website"):
-            st.session_state.page = "analyzer"
+        if st.button("Analyze"):
+            st.session_state.page="analyzer"
 
-    if st.button("🔙 Back to Welcome"):
-        st.session_state.page = "welcome"
+    if st.button("🔙 Exit"):
+        st.session_state.page="welcome"
 
 
-elif st.session_state.page == "chatbot":
+elif st.session_state.page=="chatbot":
     st.title("🤖 Honnagiri Chatbot")
-    msg = st.text_input("💬 Type something:")
+    msg = st.text_input("💬 Say something:")
     if msg:
-        st.session_state.chat_history.append({"role": "user", "content": msg})
+        st.session_state.chat_history.append({"role":"user","content":msg})
         r = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=st.session_state.chat_history
-        )
-        st.session_state.chat_history.append({"role": "assistant", "content": r.choices[0].message.content})
+            messages=st.session_state.chat_history)
+        st.session_state.chat_history.append({"role":"assistant","content":r.choices[0].message.content})
 
     for chat in st.session_state.chat_history:
         st.write(f"**{'🧑' if chat['role']=='user' else '🤖'}:** {chat['content']}")
 
     if st.button("🔙 Back"):
-        st.session_state.page = "menu"
+        st.session_state.page="menu"
 
 
-elif st.session_state.page == "content":
+elif st.session_state.page=="content":
     st.title("📝 Honnagiri Content Generator")
 
-    if st.button("✨ Generate Content"):
-        prompt = "Generate a powerful creative marketing content piece for a futuristic AI product."
+    topic = st.text_input("🧾 What content do you need?")
+    audience = st.text_input("🎯 Who is the audience?")
+
+    if st.button("✨ Generate"):
+        prompt = f"Write engaging marketing content about '{topic}' for the target audience '{audience}'."
         r = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role":"user","content":prompt}]
         )
         st.session_state.generated_text = r.choices[0].message.content
 
     if st.session_state.generated_text:
         st.write(st.session_state.generated_text)
-        file_name = st.text_input("File name:", value="content.txt")
+        filename = st.text_input("File name:", value="content.txt")
         if st.button("📤 Upload to Drive"):
-            upload_to_drive(file_name, st.session_state.generated_text)
-            st.success("Uploaded to Drive!")
+            upload_to_drive(filename, st.session_state.generated_text)
+            st.success("Uploaded!")
 
     if st.button("🔙 Back"):
-        st.session_state.page = "menu"
+        st.session_state.page="menu"
 
 
-elif st.session_state.page == "analyzer":
+elif st.session_state.page=="analyzer":
     st.title("🌍 Universal Website Analyzer")
-    url = st.text_input("🔗 Enter any website URL:")
+    url = st.text_input("🔗 Paste website URL:")
     if st.button("📡 Analyze"):
         if url:
-            with st.spinner("Analyzing webpage..."):
-                result = analyze_website(url, client)
-                st.write(result)
+            with st.spinner("Reading site..."):
+                st.write(analyze_website(url, client))
         else:
             st.warning("Enter a valid URL.")
-
     if st.button("🔙 Back"):
-        st.session_state.page = "menu"
+        st.session_state.page="menu"
