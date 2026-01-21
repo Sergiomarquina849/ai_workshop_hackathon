@@ -2,6 +2,7 @@ streamlit
 pandas
 requests
 groq
+beautifulsoup4
 google-auth
 google-auth-oauthlib
 google-api-python-client
