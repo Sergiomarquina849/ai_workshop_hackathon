@@ -242,4 +242,3 @@ elif st.session_state.page == "content":
     audience = st.text_input("Target Audience")
     tone = st.selectbox("Tone", ["Professional", "Casual", "Exciting"])
 
-   This should be posted correctly next time
