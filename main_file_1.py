@@ -9,7 +9,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 
-
 # ===================== FUTURISTIC UI THEME =====================
 def inject_css():
     st.markdown("""
@@ -70,6 +69,7 @@ def inject_css():
         .content-box { color:#a5b4fc !important; }
         .web-box { color:#fcd34d !important; }
         .image-box { color:#bbf7d0 !important; }
+        .compare-box { color:#ff9b9b !important; }
 
         textarea, .stTextInput>div>div>input {
             background:rgba(255,255,255,0.15)!important;
@@ -102,7 +102,6 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 
-
 # ===================== GOOGLE DRIVE =====================
 def get_drive_service():
     creds_info = st.secrets["gcp_service_account"]
@@ -123,14 +122,15 @@ def upload_to_drive(filename, text):
     return file.get('id'), file.get('name')
 
 
-
-# ===================== WEBSITE ANALYZER =====================
+# ===================== WEBSITE TEXT EXTRACTOR =====================
 def extract_visible_text(html):
     soup = BeautifulSoup(html,"html.parser")
     for t in soup(["script","style","meta","header","nav","footer","noscript"]):
         t.decompose()
     return " ".join(soup.stripped_strings)
 
+
+# ===================== WEBSITE ANALYZER MODEL =====================
 def analyze_website(url, client):
     try:
         response = requests.get(url, timeout=10)
@@ -165,6 +165,49 @@ Content:
         return f"❌ Error: {e}"
 
 
+# ===================== WEBSITE COMPARATOR MODEL =====================
+def compare_websites(url1, url2, client):
+    try:
+        r1 = requests.get(url1, timeout=10)
+        r2 = requests.get(url2, timeout=10)
+
+        text1 = extract_visible_text(r1.text)[:6000]
+        text2 = extract_visible_text(r2.text)[:6000]
+
+        prompt = f"""
+Compare the following two websites based on their content:
+
+=== WEBSITE A ===
+{text1}
+
+=== WEBSITE B ===
+{text2}
+
+Analyze and compare:
+- Purpose
+- Key sections
+- Target audience
+- Offerings/features
+- Strengths
+- Differences
+- Similarities
+- Unique factors
+
+Rules:
+- Use bullet points
+- No justification language
+- Clear conclusion at end
+"""
+
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role":"user","content":prompt}]
+        )
+        return r.choices[0].message.content
+
+    except Exception as e:
+        return f"❌ Error: {e}"
+
 
 # ===================== STREAMLIT APP =====================
 st.set_page_config(page_title="Honnagiri Multi Tool", page_icon="🚀", layout="wide")
@@ -185,7 +228,7 @@ if st.session_state.page=="welcome":
 
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
-    c1,c2,c3,c4 = st.columns(4)
+    c1,c2,c3,c4,c5 = st.columns(5)
 
     with c1:
         st.markdown("<div class='feature-card chatbot-box'><span class='feature-icon'>🤖</span>Chatbot</div>", unsafe_allow_html=True)
@@ -206,6 +249,11 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card image-box'><span class='feature-icon'>🖼</span>Text → Image</div>", unsafe_allow_html=True)
         if st.button("Image Generator"):
             st.session_state.page="image"
+
+    with c5:
+        st.markdown("<div class='feature-card compare-box'><span class='feature-icon'>📊</span>Website Comparator</div>", unsafe_allow_html=True)
+        if st.button("Compare Sites"):
+            st.session_state.page="compare2"
 
     if st.button("🔙 Exit"):
         st.session_state.page="welcome"
@@ -274,10 +322,40 @@ elif st.session_state.page=="image":
     prompt = st.text_input("🎨 Enter a description for the image:")
     if st.button("🎆 Generate Image"):
         if prompt:
-            img_url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
-            st.image(img_url, caption="Generated Image")
+            try:
+                formatted = prompt.replace(" ", "+")
+                api_url = f"https://image.pollinations.ai/prompt/{formatted}"
+                headers = {
+                    "User-Agent": "Mozilla/5.0",
+                    "Accept": "image/png,image/jpeg,image/jpg"
+                }
+                r = requests.get(api_url, headers=headers, timeout=60)
+                if r.status_code == 200:
+                    st.image(r.content, caption="Generated Image", use_column_width=True)
+                else:
+                    st.error("❌ Failed to generate image. Try again.")
+            except Exception as e:
+                st.error(f"⚠ Error: {e}")
         else:
             st.warning("Enter a valid prompt!")
+    if st.button("🔙 Back"):
+        st.session_state.page="menu"
+
+
+
+elif st.session_state.page=="compare2":
+    st.title("📊 Website Comparator")
+
+    url1 = st.text_input("🔗 Enter Website URL 1:")
+    url2 = st.text_input("🔗 Enter Website URL 2:")
+
+    if st.button("🧾 Compare"):
+        if url1 and url2:
+            with st.spinner("Comparing both websites..."):
+                result = compare_websites(url1, url2, client)
+                st.write(result)
+        else:
+            st.warning("⚠ Please enter both URLs!")
 
     if st.button("🔙 Back"):
         st.session_state.page="menu"
