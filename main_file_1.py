@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+from groq import Groq
 
 # ===== CUSTOM CSS FOR COLORFUL UI =====
 def inject_css():
@@ -41,17 +42,10 @@ def inject_css():
             background: #27ae60;
             color: white;
         }
-        .back-btn>button {
-            background: #e74c3c !important;
-        }
         </style>
     """, unsafe_allow_html=True)
 
-
-# ===== FUNCTIONS =====
-def chatbot_response(user_msg):
-    return f"🤖 Chatbot: You said → {user_msg}"
-
+# ===== CONTENT GENERATOR FUNCTION =====
 def generate_content(product, audience):
     return f"""
 📝 **Generated Marketing Content**
@@ -63,6 +57,7 @@ def generate_content(product, audience):
 Designed to meet expectations with quality, elegance, and performance!
 """
 
+# ===== DATA ANALYSIS FUNCTION =====
 def analyze_data_from_url(url):
     try:
         df = pd.read_csv(url)
@@ -80,54 +75,71 @@ def analyze_data_from_url(url):
 st.set_page_config(page_title="Multi Tool App", page_icon="🚀", layout="wide")
 inject_css()
 
+# Groq Client Init
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+
+# Session state init
 if "page" not in st.session_state:
     st.session_state.page = "welcome"
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # ===== WELCOME PAGE =====
 if st.session_state.page == "welcome":
     st.title("👋 Welcome to Multi Tool App")
     st.markdown("### Your all-in-one creative, AI-powered tool!")
-    st.write("")
     if st.button("🚀 Start"):
         st.session_state.page = "menu"
 
 # ===== MENU PAGE =====
 elif st.session_state.page == "menu":
     st.title("📍 Choose What You Want to Use")
-    st.write("Select one of the features below:")
-    st.write("")
-
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        with st.container():
-            st.markdown('<div class="menu-card">🤖<br><b>Chatbot</b><br>Talk to AI!</div>', unsafe_allow_html=True)
-            if st.button("Open Chatbot"):
-                st.session_state.page = "chatbot"
+        st.markdown('<div class="menu-card">🤖<br><b>Chatbot</b><br>Talk to AI!</div>', unsafe_allow_html=True)
+        if st.button("Open Chatbot"):
+            st.session_state.page = "chatbot"
 
     with col2:
-        with st.container():
-            st.markdown('<div class="menu-card">📝<br><b>Content Generator</b><br>Create text fast!</div>', unsafe_allow_html=True)
-            if st.button("Open Generator"):
-                st.session_state.page = "content"
+        st.markdown('<div class="menu-card">📝<br><b>Content Generator</b><br>Create text fast!</div>', unsafe_allow_html=True)
+        if st.button("Open Generator"):
+            st.session_state.page = "content"
 
     with col3:
-        with st.container():
-            st.markdown('<div class="menu-card">📊<br><b>Compare & Analyze Data</b><br>From URL link</div>', unsafe_allow_html=True)
-            if st.button("Analyze Data"):
-                st.session_state.page = "compare"
+        st.markdown('<div class="menu-card">📊<br><b>Compare & Analyze Data</b><br>From URL link</div>', unsafe_allow_html=True)
+        if st.button("Analyze Data"):
+            st.session_state.page = "compare"
 
-    st.write("")
     if st.button("🔙 Back to Welcome"):
         st.session_state.page = "welcome"
 
-# ===== CHATBOT PAGE =====
+# ===== CHATBOT PAGE (UPDATED WITH GROQ) =====
 elif st.session_state.page == "chatbot":
-    st.title("🤖 Chatbot")
-    user_input = st.text_input("💬 Enter your message:")
-    if user_input:
-        st.success(chatbot_response(user_input))
-    if st.button("🔙 Back", key="b1"):
+    st.title("🤖 AI Chatbot (Powered by Groq)")
+
+    user_msg = st.text_input("💬 Type your message:")
+
+    if user_msg:
+        st.session_state.chat_history.append({"role": "user", "content": user_msg})
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=st.session_state.chat_history
+        )
+
+        bot_reply = response.choices[0].message.content
+        st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
+
+    # Display chat history
+    for chat in st.session_state.chat_history:
+        if chat["role"] == "user":
+            st.markdown(f"**🧑 You:** {chat['content']}")
+        else:
+            st.markdown(f"**🤖 Bot:** {chat['content']}")
+
+    if st.button("🔙 Back"):
         st.session_state.page = "menu"
 
 # ===== CONTENT GENERATOR PAGE =====
@@ -140,10 +152,10 @@ elif st.session_state.page == "content":
             st.success(generate_content(product, audience))
         else:
             st.warning("⚠ Please fill both fields!")
-    if st.button("🔙 Back", key="b2"):
+    if st.button("🔙 Back"):
         st.session_state.page = "menu"
 
-# ===== COMPARE & ANALYZE PAGE =====
+# ===== DATA ANALYSIS PAGE =====
 elif st.session_state.page == "compare":
     st.title("📊 Compare & Analyze Data")
     url = st.text_input("🔗 Enter CSV URL:")
@@ -159,5 +171,5 @@ elif st.session_state.page == "compare":
                 st.error(result.get("error"))
         else:
             st.warning("⚠ URL cannot be empty!")
-    if st.button("🔙 Back", key="b3"):
+    if st.button("🔙 Back"):
         st.session_state.page = "menu"
