@@ -3,7 +3,6 @@ from groq import Groq
 import pandas as pd
 import io
 
-# Google Drive Upload Imports
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -64,7 +63,7 @@ def inject_css():
             100% {background-position: -3000px 3000px;}
         }
 
-        /* ===== GLASS PANEL ===== */
+        /* ===== PANELS ===== */
         .main .block-container {
             backdrop-filter: blur(14px);
             background: rgba(255,255,255,0.07);
@@ -132,7 +131,7 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 
-# ===================== GOOGLE DRIVE =====================
+# ===================== DRIVE FUNCTIONS =====================
 def get_drive_service():
     creds_info = st.secrets["gcp_service_account"]
     creds = service_account.Credentials.from_service_account_info(
@@ -166,6 +165,7 @@ def analyze_data_from_url(url):
 # ===================== APP BOOT =====================
 st.set_page_config(page_title="Honnagiri Multi Tool", page_icon="🚀", layout="wide")
 inject_css()
+
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 if "page" not in st.session_state:
@@ -176,7 +176,7 @@ if "generated_text" not in st.session_state:
     st.session_state.generated_text = ""
 
 
-# ===================== TRANSITION HELPER =====================
+# ===================== TRANSITION FUNCTION =====================
 def transition_to(page):
     placeholder = st.empty()
     placeholder.markdown('<div class="transition-overlay"></div>', unsafe_allow_html=True)
@@ -184,7 +184,7 @@ def transition_to(page):
     st.experimental_rerun()
 
 
-# ===================== PAGE ROUTES =====================
+# ===================== PAGES =====================
 if st.session_state.page == "welcome":
     st.title("🌌 Welcome to Honnagiri Universe Tools")
     st.write("A multi-dimensional AI suite across galaxies ✨")
@@ -218,8 +218,8 @@ elif st.session_state.page == "menu":
 
 elif st.session_state.page == "chatbot":
     st.title("🤖 Honnagiri Chatbot (Groq Powered)")
-    msg = st.text_input("💬 Speak to the AI:")
 
+    msg = st.text_input("💬 Speak to the AI:")
     if msg:
         st.session_state.chat_history.append({"role": "user", "content": msg})
         r = client.chat.completions.create(
@@ -237,66 +237,9 @@ elif st.session_state.page == "chatbot":
 
 elif st.session_state.page == "content":
     st.title("📝 Honnagiri Content Generator → Google Drive")
-    st.info("Files are saved to the Service Account's Google Drive.")
 
     product = st.text_input("Product / Service Name")
     audience = st.text_input("Target Audience")
     tone = st.selectbox("Tone", ["Professional", "Casual", "Exciting"])
 
-    if st.button("✨ Generate Content"):
-        prompt = f"""
-        Create marketing content for:
-        Product: {product}
-        Audience: {audience}
-        Tone: {tone}
-
-        Generate:
-        1. Ad copy
-        2. Email subject
-        3. LinkedIn post
-        """
-        with st.spinner("Generating…"):
-            r = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role": "user", "content": prompt}]
-            )
-            st.session_state.generated_text = r.choices[0].message.content
-
-    if st.session_state.generated_text:
-        st.subheader("✨ Output")
-        st.text_area("Preview", st.session_state.generated_text, height=250)
-
-        file_name = st.text_input("Filename", value="honnagiri_marketing.txt")
-
-        if st.button("📤 Upload to Google Drive"):
-            try:
-                with st.spinner("Uploading…"):
-                    file_id, name = upload_to_drive(file_name, st.session_state.generated_text)
-                    st.success(f"✔ Uploaded as {name}")
-                    st.write(f"📎 File ID: `{file_id}`")
-            except Exception as e:
-                st.error(f"❌ {e}")
-
-    if st.button("🔙 Back"):
-        transition_to("menu")
-
-
-elif st.session_state.page == "compare":
-    st.title("📊 CSV Data Analyzer")
-    url = st.text_input("🔗 CSV URL:")
-
-    if st.button("📂 Analyze"):
-        if url:
-            result, df = analyze_data_from_url(url)
-            if df is not None:
-                st.subheader("📌 Summary")
-                st.json(result)
-                st.subheader("📄 Preview")
-                st.dataframe(df.head())
-            else:
-                st.error(result.get("error"))
-        else:
-            st.warning("⚠ Enter a URL")
-
-    if st.button("🔙 Back"):
-        transition_to("menu")
+   This should be posted correctly next time
