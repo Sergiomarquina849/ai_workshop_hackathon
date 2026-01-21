@@ -98,7 +98,7 @@ def analyze_data_from_url(url):
 
 
 # ===== STREAMLIT INITIAL CONFIG =====
-st.set_page_config(page_title="Multi Tool App", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="Honnagiri Multi Tool App", page_icon="🚀", layout="wide")
 inject_css()
 
 # Init Groq Client
@@ -117,7 +117,7 @@ if "generated_text" not in st.session_state:
 
 # ===== WELCOME PAGE =====
 if st.session_state.page == "welcome":
-    st.title("👋 Welcome to Multi Tool App")
+    st.title("👋 Welcome to Honnagiri Multi Tool App")
     st.markdown("### Your all-in-one creative, AI-powered tool!")
     if st.button("🚀 Start"):
         st.session_state.page = "menu"
@@ -149,7 +149,7 @@ elif st.session_state.page == "menu":
 
 # ===== CHATBOT PAGE =====
 elif st.session_state.page == "chatbot":
-    st.title("🤖 AI Chatbot (Powered by Groq)")
+    st.title("🤖 Honnagiri AI Chatbot (Powered by Groq)")
     user_msg = st.text_input("💬 Type your message:")
 
     if user_msg:
@@ -173,9 +173,9 @@ elif st.session_state.page == "chatbot":
         st.session_state.page = "menu"
 
 
-# ===== CONTENT GENERATOR PAGE (UPDATED AS PER YOUR CODE) =====
+# ===== CONTENT GENERATOR PAGE (RENAMED) =====
 elif st.session_state.page == "content":
-    st.title("📢 PragyanAI Marketing Content Generator (Google Drive Export)")
+    st.title("📢 Honnagiri Marketing Content Generator (Google Drive Export)")
     st.info("Files will be uploaded to the service account's Google Drive.")
 
     product = st.text_input("Product / Service Name")
@@ -185,7 +185,7 @@ elif st.session_state.page == "content":
     if st.button("Generate Content"):
         prompt = f"Create marketing content for:\nProduct: {product}\nAudience: {audience}\nTone: {tone}\n\nGenerate: 1. Ad copy 2. Email subject 3. LinkedIn post"
 
-        with st.spinner("Brainstorming..."):
+        with st.spinner("Generating..."):
             response = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role": "user", "content": prompt}],
@@ -196,7 +196,7 @@ elif st.session_state.page == "content":
         st.subheader("✨ Generated Content")
         st.text_area("Preview", st.session_state.generated_text, height=200)
 
-        file_name = st.text_input("File name to upload (e.g. marketing.txt)", value="marketing.txt")
+        file_name = st.text_input("File name to upload (e.g. marketing.txt)", value="honnagiri_content.txt")
 
         if st.button("Upload to Google Drive"):
             try:
