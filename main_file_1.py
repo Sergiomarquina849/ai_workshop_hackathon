@@ -2,22 +2,67 @@ import streamlit as st
 import requests
 import pandas as pd
 
-# ---- CHATBOT DUMMY FUNCTION ----
-def chatbot_response(user_msg):
-    return f"Chatbot Response: You said → {user_msg}"
+# ===== CUSTOM CSS FOR COLORFUL UI =====
+def inject_css():
+    st.markdown("""
+        <style>
+        body {
+            background: linear-gradient(135deg, #9b59b6, #3498db);
+            color: white !important;
+        }
+        .main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        .menu-card {
+            background-color: white;
+            color: #2c3e50;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.2);
+            text-align: center;
+            transition: 0.3s;
+        }
+        .menu-card:hover {
+            transform: scale(1.03);
+            box-shadow: 0px 6px 15px rgba(0,0,0,0.3);
+        }
+        .stButton>button {
+            background: #2ecc71;
+            color: white;
+            font-size: 17px;
+            padding: 10px 22px;
+            border-radius: 10px;
+            border: None;
+            margin-top: 10px;
+            width: 100%;
+        }
+        .stButton>button:hover {
+            background: #27ae60;
+            color: white;
+        }
+        .back-btn>button {
+            background: #e74c3c !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-# ---- CONTENT GENERATION FUNCTION ----
+
+# ===== FUNCTIONS =====
+def chatbot_response(user_msg):
+    return f"🤖 Chatbot: You said → {user_msg}"
+
 def generate_content(product, audience):
     return f"""
-    Marketing Content:
-    Product: {product}
-    Target Audience: {audience}
+📝 **Generated Marketing Content**
 
-    Sample Output:
-    Introducing {product}! Perfect for {audience}, designed to meet needs with quality and value.
-    """
+🌟 **Product:** {product}  
+🎯 **Audience:** {audience}  
 
-# ---- DATA COMPARISON & ANALYSIS FUNCTION ----
+✨ Introducing **{product}**, perfectly crafted for **{audience}**.  
+Designed to meet expectations with quality, elegance, and performance!
+"""
+
 def analyze_data_from_url(url):
     try:
         df = pd.read_csv(url)
@@ -31,73 +76,88 @@ def analyze_data_from_url(url):
     except Exception as e:
         return {"error": str(e)}, None
 
-# ---- STREAMLIT UI ----
+# ===== STREAMLIT UI START =====
+st.set_page_config(page_title="Multi Tool App", page_icon="🚀", layout="wide")
+inject_css()
 
-st.set_page_config(page_title="Multi Tool App", page_icon="🚀", layout="centered")
-
-# Initialize session state
 if "page" not in st.session_state:
     st.session_state.page = "welcome"
 
-# --- PAGE: WELCOME ---
+# ===== WELCOME PAGE =====
 if st.session_state.page == "welcome":
-    st.title("👋 Welcome!")
-    st.write("Click below to start using the app")
-    if st.button("Continue"):
+    st.title("👋 Welcome to Multi Tool App")
+    st.markdown("### Your all-in-one creative, AI-powered tool!")
+    st.write("")
+    if st.button("🚀 Start"):
         st.session_state.page = "menu"
 
-# --- PAGE: MENU ---
+# ===== MENU PAGE =====
 elif st.session_state.page == "menu":
-    st.title("Select a Tool")
-    st.write("Choose one of the following options:")
-    if st.button("🤖 Chatbot"):
-        st.session_state.page = "chatbot"
-    if st.button("📝 Content Generator"):
-        st.session_state.page = "content"
-    if st.button("📊 Compare & Analyze Data"):
-        st.session_state.page = "compare"
-    if st.button("⬅ Back"):
+    st.title("📍 Choose What You Want to Use")
+    st.write("Select one of the features below:")
+    st.write("")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        with st.container():
+            st.markdown('<div class="menu-card">🤖<br><b>Chatbot</b><br>Talk to AI!</div>', unsafe_allow_html=True)
+            if st.button("Open Chatbot"):
+                st.session_state.page = "chatbot"
+
+    with col2:
+        with st.container():
+            st.markdown('<div class="menu-card">📝<br><b>Content Generator</b><br>Create text fast!</div>', unsafe_allow_html=True)
+            if st.button("Open Generator"):
+                st.session_state.page = "content"
+
+    with col3:
+        with st.container():
+            st.markdown('<div class="menu-card">📊<br><b>Compare & Analyze Data</b><br>From URL link</div>', unsafe_allow_html=True)
+            if st.button("Analyze Data"):
+                st.session_state.page = "compare"
+
+    st.write("")
+    if st.button("🔙 Back to Welcome"):
         st.session_state.page = "welcome"
 
-# --- PAGE: CHATBOT ---
+# ===== CHATBOT PAGE =====
 elif st.session_state.page == "chatbot":
     st.title("🤖 Chatbot")
-    user_input = st.text_input("Enter your message:")
+    user_input = st.text_input("💬 Enter your message:")
     if user_input:
-        response = chatbot_response(user_input)
-        st.success(response)
-    if st.button("⬅ Back"):
+        st.success(chatbot_response(user_input))
+    if st.button("🔙 Back", key="b1"):
         st.session_state.page = "menu"
 
-# --- PAGE: CONTENT GENERATOR ---
+# ===== CONTENT GENERATOR PAGE =====
 elif st.session_state.page == "content":
     st.title("📝 Content Generator")
-    product = st.text_input("Enter Product Name:")
-    audience = st.text_input("Enter Target Audience:")
-    if st.button("Generate"):
+    product = st.text_input("📦 Enter Product Name:")
+    audience = st.text_input("🎯 Enter Target Audience:")
+    if st.button("✨ Generate Content"):
         if product and audience:
-            output = generate_content(product, audience)
-            st.success(output)
+            st.success(generate_content(product, audience))
         else:
-            st.warning("Please fill both fields!")
-    if st.button("⬅ Back"):
+            st.warning("⚠ Please fill both fields!")
+    if st.button("🔙 Back", key="b2"):
         st.session_state.page = "menu"
 
-# --- PAGE: DATA COMPARISON & ANALYSIS ---
+# ===== COMPARE & ANALYZE PAGE =====
 elif st.session_state.page == "compare":
-    st.title("📊 Compare & Analyze Data from URL")
-    url = st.text_input("Enter CSV URL:")
-    if st.button("Analyze"):
+    st.title("📊 Compare & Analyze Data")
+    url = st.text_input("🔗 Enter CSV URL:")
+    if st.button("📂 Analyze Data"):
         if url:
             result, dataframe = analyze_data_from_url(url)
             if dataframe is not None:
-                st.subheader("Basic Analysis")
+                st.subheader("📌 Summary")
                 st.json(result)
-                st.subheader("Preview Data")
+                st.subheader("📄 Preview")
                 st.dataframe(dataframe.head())
             else:
                 st.error(result.get("error"))
         else:
-            st.warning("URL cannot be empty!")
-    if st.button("⬅ Back"):
+            st.warning("⚠ URL cannot be empty!")
+    if st.button("🔙 Back", key="b3"):
         st.session_state.page = "menu"
