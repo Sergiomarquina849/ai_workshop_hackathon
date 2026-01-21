@@ -3,50 +3,25 @@ from groq import Groq
 import pandas as pd
 import io
 
+# Google Drive Upload Imports
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 
-# ===================== GALAXY UI + TRANSITIONS =====================
+# ===================== FANTASY UI THEME CSS =====================
 def inject_css():
     st.markdown("""
         <style>
-        /* ==== TRANSITION OVERLAY ==== */
-        .transition-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background-color: rgba(10, 0, 35, 0.85);
-            backdrop-filter: blur(6px);
-            z-index: 99999;
-            opacity: 0;
-            animation: fadeOverlay 0.6s forwards;
-        }
-        @keyframes fadeOverlay {
-            0% {opacity: 0;}
-            100% {opacity: 1;}
-        }
-
-        /* ==== PAGE FADE-IN ==== */
-        .main .block-container {
-            animation: fadeIn 0.8s ease-out;
-        }
-        @keyframes fadeIn {
-            0% {opacity: 0; transform: translateY(10px);}
-            100% {opacity: 1; transform: translateY(0);}
-        }
-
-        /* ===== BACKGROUND ===== */
+        /* ===== GLOBAL BACKGROUND ===== */
         body {
             background: radial-gradient(circle at 20% 20%, #382B73, #0F0E24 60%, #000000);
-            background-attachment: fixed !important;
+            background-attachment: fixed;
             color: #E4E4F1 !important;
             font-family: 'Trebuchet MS', sans-serif;
-            overflow-x: hidden;
         }
 
-        /* ===== MOVING STARFIELD ===== */
+        /* ===== STARFIELD ANIMATION ===== */
         body::before {
             content: "";
             position: fixed;
@@ -54,16 +29,18 @@ def inject_css():
             width: 100%; height: 100%;
             background-image: url('https://i.imgur.com/7bFQq3d.png');
             background-size: cover;
+            background-position: center;
             opacity: 0.15;
-            animation: starMove 60s linear infinite;
+            animation: floatStars 60s linear infinite;
+            pointer-events: none;
             z-index: -1;
         }
-        @keyframes starMove {
-            0% {background-position: 0px 0px;}
+        @keyframes floatStars {
+            0% {background-position: 0 0;}
             100% {background-position: -3000px 3000px;}
         }
 
-        /* ===== PANELS ===== */
+        /* ===== GLASS CONTAINER ===== */
         .main .block-container {
             backdrop-filter: blur(14px);
             background: rgba(255,255,255,0.07);
@@ -98,6 +75,7 @@ def inject_css():
             border-radius: 12px;
             font-size: 17px;
             border: none;
+            letter-spacing: 0.4px;
             cursor: pointer;
             transition: 0.3s ease;
             box-shadow: 0px 0px 10px rgba(150, 55, 200, 0.8);
@@ -108,13 +86,19 @@ def inject_css():
             transform: scale(1.05);
         }
 
-        /* ===== INPUTS ===== */
-        .stTextInput>div>div>input,
-        textarea {
+        /* ===== TEXT INPUT ===== */
+        .stTextInput>div>div>input {
             background: rgba(255,255,255,0.15) !important;
-            border-radius: 10px !important;
+            border-radius: 10px;
             color: #E6E6FA !important;
             border: 1px solid rgba(255,255,255,0.3) !important;
+        }
+
+        textarea {
+            background: rgba(255,255,255,0.12) !important;
+            color: #E6E6FA !important;
+            border: 1px solid rgba(255,255,255,0.3) !important;
+            border-radius: 12px !important;
         }
 
         .stSelectbox>div>div {
@@ -131,38 +115,43 @@ def inject_css():
     """, unsafe_allow_html=True)
 
 
-# ===================== DRIVE FUNCTIONS =====================
+# ===================== GOOGLE DRIVE SERVICE =====================
 def get_drive_service():
     creds_info = st.secrets["gcp_service_account"]
     creds = service_account.Credentials.from_service_account_info(
-        creds_info, scopes=["https://www.googleapis.com/auth/drive.file"]
+        creds_info,
+        scopes=["https://www.googleapis.com/auth/drive.file"]
     )
     return build('drive', 'v3', credentials=creds)
 
+
 def upload_to_drive(filename, text_content):
     service = get_drive_service()
-    meta = {'name': filename, 'mimeType': 'text/plain'}
+
+    metadata = {'name': filename, 'mimeType': 'text/plain'}
     fh = io.BytesIO(text_content.encode('utf-8'))
     media = MediaIoBaseUpload(fh, mimetype='text/plain', resumable=True)
-    file = service.files().create(body=meta, media_body=media, fields='id,name').execute()
+    file = service.files().create(body=metadata, media_body=media, fields='id,name').execute()
+
     return file.get('id'), file.get('name')
 
 
-# ===================== CSV ANALYZER =====================
+# ===================== CSV ANALYSIS =====================
 def analyze_data_from_url(url):
     try:
         df = pd.read_csv(url)
-        return {
+        analysis = {
             "Rows": df.shape[0],
             "Columns": df.shape[1],
             "Missing Values": df.isnull().sum().to_dict(),
             "Column Types": df.dtypes.astype(str).to_dict()
-        }, df
+        }
+        return analysis, df
     except Exception as e:
         return {"error": str(e)}, None
 
 
-# ===================== APP BOOT =====================
+# ===================== APP START =====================
 st.set_page_config(page_title="Honnagiri Multi Tool", page_icon="🚀", layout="wide")
 inject_css()
 
@@ -176,22 +165,15 @@ if "generated_text" not in st.session_state:
     st.session_state.generated_text = ""
 
 
-# ===================== TRANSITION FUNCTION =====================
-def transition_to(page):
-    placeholder = st.empty()
-    placeholder.markdown('<div class="transition-overlay"></div>', unsafe_allow_html=True)
-    st.session_state.page = page
-    st.experimental_rerun()
-
-
-# ===================== PAGES =====================
+# ===================== WELCOME PAGE =====================
 if st.session_state.page == "welcome":
     st.title("🌌 Welcome to Honnagiri Universe Tools")
     st.write("A multi-dimensional AI suite across galaxies ✨")
     if st.button("🚀 Enter the Portal"):
-        transition_to("menu")
+        st.session_state.page = "menu"
 
 
+# ===================== MENU PAGE =====================
 elif st.session_state.page == "menu":
     st.title("🪐 Choose Your Cosmic Tool")
 
@@ -200,45 +182,113 @@ elif st.session_state.page == "menu":
     with col1:
         st.markdown('<div class="menu-card">🤖<br><b>Chatbot</b><br>Talk to AI</div>', unsafe_allow_html=True)
         if st.button("Open Chatbot"):
-            transition_to("chatbot")
+            st.session_state.page = "chatbot"
 
     with col2:
         st.markdown('<div class="menu-card">📝<br><b>Content Generator</b><br>Export to Drive</div>', unsafe_allow_html=True)
         if st.button("Open Generator"):
-            transition_to("content")
+            st.session_state.page = "content"
 
     with col3:
         st.markdown('<div class="menu-card">📊<br><b>Data Analyzer</b><br>CSV Insights</div>', unsafe_allow_html=True)
         if st.button("Analyze Data"):
-            transition_to("compare")
+            st.session_state.page = "compare"
 
     if st.button("🔙 Back to Welcome"):
-        transition_to("welcome")
+        st.session_state.page = "welcome"
 
 
+# ===================== CHATBOT =====================
 elif st.session_state.page == "chatbot":
     st.title("🤖 Honnagiri Chatbot (Groq Powered)")
 
-    msg = st.text_input("💬 Speak to the AI:")
-    if msg:
-        st.session_state.chat_history.append({"role": "user", "content": msg})
-        r = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=st.session_state.chat_history
-        )
-        st.session_state.chat_history.append({"role": "assistant", "content": r.choices[0].message.content})
+    user_msg = st.text_input("💬 Speak to the AI:")
 
-    for m in st.session_state.chat_history:
-        st.markdown(f"**{'🧑 You' if m['role']=='user' else '🤖 Bot'}:** {m['content']}")
+    if user_msg:
+        st.session_state.chat_history.append({"role": "user", "content": user_msg})
+
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=st.session_state.chat_history,
+        )
+
+        st.session_state.chat_history.append(
+            {"role": "assistant", "content": response.choices[0].message.content}
+        )
+
+    for chat in st.session_state.chat_history:
+        prefix = "🧑 You:" if chat["role"] == "user" else "🤖 Bot:"
+        st.markdown(f"**{prefix}** {chat['content']}")
 
     if st.button("🔙 Back"):
-        transition_to("menu")
+        st.session_state.page = "menu"
 
 
+# ===================== CONTENT GENERATOR =====================
 elif st.session_state.page == "content":
     st.title("📝 Honnagiri Content Generator → Google Drive")
+    st.info("Generated files are stored inside the service account's Google Drive.")
 
     product = st.text_input("Product / Service Name")
     audience = st.text_input("Target Audience")
     tone = st.selectbox("Tone", ["Professional", "Casual", "Exciting"])
 
+    if st.button("✨ Generate Content"):
+        prompt = f"""
+        Create marketing content for:
+        Product: {product}
+        Audience: {audience}
+        Tone: {tone}
+
+        Generate:
+        1. Ad copy
+        2. Email subject
+        3. LinkedIn post
+        """
+
+        with st.spinner("🧠 Generating …"):
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            st.session_state.generated_text = response.choices[0].message.content
+
+    if st.session_state.generated_text:
+        st.subheader("✨ Output")
+        st.text_area("Preview", st.session_state.generated_text, height=250)
+
+        file_name = st.text_input("Filename (ex: marketing.txt)", value="honnagiri_marketing.txt")
+
+        if st.button("📤 Upload to Google Drive"):
+            try:
+                with st.spinner("Uploading..."):
+                    file_id, name = upload_to_drive(file_name, st.session_state.generated_text)
+                    st.success(f"✅ Uploaded as {name}")
+                    st.write(f"📎 File ID: `{file_id}`")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    if st.button("🔙 Back"):
+        st.session_state.page = "menu"
+
+
+# ===================== COMPARISON PAGE =====================
+elif st.session_state.page == "compare":
+    st.title("📊 CSV Data Analyzer")
+    url = st.text_input("🔗 CSV URL:")
+
+    if st.button("📂 Analyze"):
+        if url:
+            result, df = analyze_data_from_url(url)
+            if df is not None:
+                st.subheader("📌 Summary")
+                st.json(result)
+                st.subheader("📄 Preview")
+                st.dataframe(df.head())
+            else:
+                st.error(result.get("error"))
+        else:
+            st.warning("⚠ Enter a valid URL")
+
+    if st.button("🔙 Back"):
+        st.session_state.page = "menu"
