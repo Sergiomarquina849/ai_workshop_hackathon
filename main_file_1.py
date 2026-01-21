@@ -33,7 +33,6 @@ def inject_css():
             z-index: -1;
         }
 
-        /* ===== FEATURE CARDS ===== */
         .feature-card {
             border-radius: 18px;
             padding: 28px;
@@ -118,8 +117,9 @@ def analyze_website(url, client):
         text = extract_visible_text(html)[:6000]
 
         prompt = f"""
-Analyze the following website text. If placement or career information exists, extract:
+Analyze the website content below.
 
+If placement or career information is found, extract:
 - University/Organization Name
 - Placement Stats
 - Avg Package
@@ -128,18 +128,22 @@ Analyze the following website text. If placement or career information exists, e
 - Students Placed
 - Summary
 
-If no placement/career-related info exists:
-
+Otherwise:
 - Summarize what the website is about
 - Describe its purpose
-- Highlight key sections or features
+- Highlight key topics/sections
+
+Rules:
+- Do NOT justify missing info
+- Do NOT mention absence
+- Output ONLY structured bullet points
 
 Website Content:
 \"\"\"
 {text}
 \"\"\"
-Return clean bullet points.
 """
+
         res = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}]
@@ -213,6 +217,7 @@ elif st.session_state.page == "chatbot":
 
 elif st.session_state.page == "content":
     st.title("📝 Honnagiri Content Generator → Drive")
+
     product = st.text_input("Product Name")
     audience = st.text_input("Audience")
     tone = st.selectbox("Tone", ["Professional", "Casual", "Exciting"])
@@ -226,7 +231,7 @@ elif st.session_state.page == "content":
         st.session_state.generated_text = r.choices[0].message.content
 
     if st.session_state.generated_text:
-        st.text_area("Generated", st.session_state.generated_text, height=220)
+        st.write(st.session_state.generated_text)  # ONLY SHOW CONTENT, NO EXTRA UI
         file_name = st.text_input("File name:", value="output.txt")
         if st.button("📤 Upload to Drive"):
             upload_to_drive(file_name, st.session_state.generated_text)
@@ -239,6 +244,7 @@ elif st.session_state.page == "content":
 elif st.session_state.page == "analyzer":
     st.title("🌍 Universal Website Analyzer")
     url = st.text_input("🔗 Enter any website URL:")
+
     if st.button("📡 Analyze"):
         if url:
             with st.spinner("Analyzing webpage..."):
@@ -246,5 +252,6 @@ elif st.session_state.page == "analyzer":
                 st.write(result)
         else:
             st.warning("Please enter a valid URL.")
+
     if st.button("🔙 Back"):
         st.session_state.page = "menu"
