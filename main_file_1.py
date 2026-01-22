@@ -220,7 +220,7 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>📝<br>Content Generator</div>", unsafe_allow_html=True)
         if st.button("Content Gen"): st.session_state.page="content"
     with c3:
-        st.markmarkdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
+        st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
     c4,c5,c6 = st.columns(3)
