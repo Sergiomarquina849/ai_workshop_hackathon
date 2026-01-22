@@ -6,11 +6,4 @@ PyPDF2
 python-docx
 docx2txt
 reportlab
-fuzzywuzzy
-python-Levenshtein
-google-auth
-google-auth-oauthlib
-google-api-python-client
 Pillow
-torch
-transformers
