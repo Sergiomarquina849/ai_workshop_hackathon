@@ -359,11 +359,12 @@ elif st.session_state.page=="converter":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# IMAGE ANALYZER
+# IMAGE ANALYZER (Fixed)
 elif st.session_state.page=="img_analyzer":
     st.title("🖼 Image Analyzer")
 
     uploaded = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
+
     if uploaded:
         img_bytes = uploaded.read()
         st.image(img_bytes, caption="Uploaded Image", use_column_width=True)
@@ -372,14 +373,18 @@ elif st.session_state.page=="img_analyzer":
             with st.spinner("Analyzing image..."):
 
                 try:
+                    # NEW working Pollinations caption API
                     resp = requests.post(
-                        "https://image.pollinations.ai/caption",
-                        files={"image": img_bytes},
+                        "https://image.pollinations.ai/api/caption",
+                        files={"image": ("image.jpg", img_bytes, "image/jpeg")},
                         timeout=20
                     )
-                    caption = resp.text.strip()
 
-                    prompt = f"Explain this image from the caption:\n\"{caption}\""
+                    data = resp.json()
+
+                    caption = data.get("caption", "No caption detected")
+
+                    prompt = f"Explain this image based on the caption:\n\"{caption}\""
                     r = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[{"role":"user","content":prompt}]
