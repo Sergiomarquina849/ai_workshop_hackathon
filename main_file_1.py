@@ -41,7 +41,7 @@ def inject_css():
         text-align: center;
         color: #E6E6FA;
         font-weight: 600;
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         border: 2px solid rgba(255,255,255,0.18);
         background: rgba(255,255,255,0.08);
         box-shadow: 0 0 25px rgba(99, 70, 255, 0.4);
@@ -57,7 +57,6 @@ def inject_css():
         border-radius:10px!important;
         color:#E6E6FA!important;
         border:1px solid rgba(255,255,255,0.3)!important;
-        box-shadow: inset 0 0 12px rgba(0,0,0,0.4);
     }
     .stButton>button {
         background: linear-gradient(135deg,#6D28D9,#4C1D95);
@@ -76,6 +75,7 @@ def inject_css():
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 
 # ===================== GOOGLE DRIVE =====================
@@ -98,12 +98,14 @@ def upload_to_drive(filename, text):
     return file.get('id'), file.get('name')
 
 
+
 # ===================== WEBSITE UTILITIES =====================
 def extract_visible_text(html):
     soup = BeautifulSoup(html,"html.parser")
     for t in soup(["script","style","meta","header","nav","footer","noscript"]):
         t.decompose()
     return " ".join(soup.stripped_strings)
+
 
 
 # ===================== WEBSITE ANALYZER =====================
@@ -126,6 +128,7 @@ Content:
         messages=[{"role":"user","content":prompt}]
     )
     return r.choices[0].message.content
+
 
 
 # ===================== WEBSITE COMPARATOR =====================
@@ -156,6 +159,7 @@ SITE B:
     return r.choices[0].message.content
 
 
+
 # ===================== PDF/TEXT SUMMARIZER =====================
 def pdf_to_text(file):
     pdf = PyPDF2.PdfReader(file)
@@ -166,20 +170,6 @@ def pdf_to_text(file):
             text += extracted + "\n"
     return text
 
-def summarize_text(text, client):
-    prompt = f"""
-Summarize this text into:
-- Bullet key points
-- 5-10 sentence summary
-
-Text:
-\"\"\"{text}\"\"\"
-"""
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
-    return r.choices[0].message.content
 
 
 # ===================== FILE CONVERTER =====================
@@ -217,19 +207,23 @@ def convert_txt_to_pdf(text):
     return buf
 
 
-# ===================== CUSTOM SENTENCE SPLITTER (NO NLTK) =====================
+
+# ===================== CUSTOM SENTENCE SPLITTER =====================
 import re
 def simple_sentence_split(text):
     sentences = re.split(r'(?<=[.!?])\s+', text)
     return [s.strip() for s in sentences if len(s.strip()) > 0]
 
 
-# ===================== FREE WEB PLAGIARISM CHECKER =====================
-def free_web_plagiarism_check(text, client):
-    sentences = simple_sentence_split(text)
-    queries = sentences[:3]
 
-    matches = []
+# ===================== IMPROVED PLAGIARISM CHECKER =====================
+def free_web_plagiarism_check(text):
+    sentences = simple_sentence_split(text)
+    queries = sentences[:5]  # take first 5 sentences max
+
+    results = []
+    total = len(queries)
+    copied = 0
 
     for q in queries:
         url = f"https://duckduckgo.com/html/?q={requests.utils.quote(q)}"
@@ -237,31 +231,34 @@ def free_web_plagiarism_check(text, client):
         soup = BeautifulSoup(r.text, "html.parser")
 
         snippets = soup.select(".result__snippet")
+        best_score = 0
+        best_snippet = ""
+
         for s in snippets[:3]:
             snippet = s.get_text()
             score = fuzz.ratio(q.lower(), snippet.lower())
-            if score > 40:
-                matches.append({"input": q, "snippet": snippet, "score": score})
+            if score > best_score:
+                best_score = score
+                best_snippet = snippet
 
-    prompt = f"""
-Perform plagiarism analysis.
-Source Text:
-\"\"\"{text}\"\"\"
+        results.append({
+            "sentence": q,
+            "best_match": best_snippet,
+            "score": best_score
+        })
 
-Matches:
-{json.dumps(matches, indent=2)}
+        if best_score > 50:
+            copied += 1
 
-Return:
-- Estimated plagiarism percentage
-- Copied sentences
-- Unique content explanation
-- Final judgment
-"""
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
-    return r.choices[0].message.content
+    plagiarism_percentage = round((copied / total) * 100, 2) if total > 0 else 0
+
+    return {
+        "percent": plagiarism_percentage,
+        "copied": copied,
+        "total": total,
+        "details": results
+    }
+
 
 
 # ===================== RESUME ANALYZER =====================
@@ -294,6 +291,7 @@ Resume:
     return r.choices[0].message.content
 
 
+
 # ===================== STREAMLIT APP =====================
 st.set_page_config(page_title="Honnagiri Multi Tool", page_icon="🚀", layout="wide")
 inject_css()
@@ -303,7 +301,8 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 if "page" not in st.session_state: st.session_state.page="welcome"
 if "chat_history" not in st.session_state: st.session_state.chat_history=[]
 
-# ===================== PAGE ROUTING =====================
+
+# ===================== PAGE ROUTER =====================
 if st.session_state.page=="welcome":
     st.title("🌌 Welcome to Honnagiri Universe Tools")
     if st.button("🚀 Enter"):
@@ -313,7 +312,6 @@ if st.session_state.page=="welcome":
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
 
-    # Row 1
     c1,c2,c3 = st.columns(3)
     with c1:
         st.markdown("<div class='feature-card'>🤖<br>Chatbot</div>", unsafe_allow_html=True)
@@ -327,7 +325,6 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
-    # Row 2
     c4,c5,c6 = st.columns(3)
     with c4:
         st.markdown("<div class='feature-card'>🖼<br>Text → Image</div>", unsafe_allow_html=True)
@@ -335,13 +332,12 @@ elif st.session_state.page=="menu":
 
     with c5:
         st.markdown("<div class='feature-card'>📊<br>Website Comparator</div>", unsafe_allow_html=True)
-        if st.button("Compare"): st.session_state.page="compare2"
+        if st.button("Compare Sites"): st.session_state.page="compare2"
 
     with c6:
         st.markdown("<div class='feature-card'>📄<br>PDF/Text Summarizer</div>", unsafe_allow_html=True)
         if st.button("Summarizer"): st.session_state.page="summarizer"
 
-    # Row 3
     c7,c8,c9 = st.columns(3)
     with c7:
         st.markdown("<div class='feature-card'>🔁<br>File Converter</div>", unsafe_allow_html=True)
@@ -349,13 +345,14 @@ elif st.session_state.page=="menu":
 
     with c8:
         st.markdown("<div class='feature-card'>🕵️<br>Plagiarism Checker</div>", unsafe_allow_html=True)
-        if st.button("Plag Check"): st.session_state.page="plag"
+        if st.button("Check Plagiarism"): st.session_state.page="plag"
 
     with c9:
         st.markdown("<div class='feature-card'>📑<br>Resume Analyzer</div>", unsafe_allow_html=True)
-        if st.button("Resume"): st.session_state.page="resume"
+        if st.button("Analyze Resume"): st.session_state.page="resume"
 
     if st.button("🔙 Exit"): st.session_state.page="welcome"
+
 
 
 elif st.session_state.page=="chatbot":
@@ -373,6 +370,7 @@ elif st.session_state.page=="chatbot":
     if st.button("Back"): st.session_state.page="menu"
 
 
+
 elif st.session_state.page=="content":
     st.title("📝 Content Generator")
     topic = st.text_input("Topic:")
@@ -387,12 +385,14 @@ elif st.session_state.page=="content":
     if st.button("Back"): st.session_state.page="menu"
 
 
+
 elif st.session_state.page=="analyzer":
     st.title("🌍 Website Analyzer")
     url = st.text_input("Website URL:")
     if st.button("Analyze"):
         st.write(analyze_website(url, client))
     if st.button("Back"): st.session_state.page="menu"
+
 
 
 elif st.session_state.page=="image":
@@ -409,13 +409,15 @@ elif st.session_state.page=="image":
     if st.button("Back"): st.session_state.page="menu"
 
 
+
 elif st.session_state.page=="compare2":
     st.title("📊 Website Comparator")
-    u1 = st.text_input("Website 1:")
-    u2 = st.text_input("Website 2:")
+    u1 = st.text_input("Website 1 URL:")
+    u2 = st.text_input("Website 2 URL:")
     if st.button("Compare Now"):
         st.write(compare_websites(u1, u2, client))
     if st.button("Back"): st.session_state.page="menu"
+
 
 
 elif st.session_state.page=="summarizer":
@@ -429,17 +431,22 @@ elif st.session_state.page=="summarizer":
             elif ext=="docx": txt = docx2txt.process(file)
             elif ext=="txt": txt = file.read().decode()
         if txt.strip():
-            st.write(summarize_text(txt, client))
+            prompt = f"Summarize this:\n{txt}"
+            r = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role":"user","content":prompt}]
+            )
+            st.write(r.choices[0].message.content)
         else:
             st.warning("No content found")
     if st.button("Back"): st.session_state.page="menu"
+
 
 
 elif st.session_state.page=="converter":
     st.title("🔁 Universal File Converter")
     file = st.file_uploader("Upload file:", type=["pdf","docx","txt"])
     output = st.selectbox("Convert to:", ["TXT","PDF","DOCX"])
-
     if st.button("Convert"):
         if file:
             ext = file.name.split(".")[-1].lower()
@@ -458,20 +465,30 @@ elif st.session_state.page=="converter":
                 st.download_button("Download PDF", buf, file_name=file.name.replace(ext,"pdf"))
         else:
             st.warning("Upload a file first")
-
     if st.button("Back"): st.session_state.page="menu"
+
 
 
 elif st.session_state.page=="plag":
-    st.title("🕵️ Free Web Plagiarism Checker (No API Keys)")
+    st.title("🕵️ Improved Plagiarism Checker")
     content = st.text_area("Paste text:")
-    if st.button("Check Plagiarism"):
+    if st.button("Scan Now"):
         if content.strip():
-            with st.spinner("Searching web..."):
-                st.write(free_web_plagiarism_check(content, client))
+            with st.spinner("Scanning the web..."):
+                result = free_web_plagiarism_check(content)
+                st.subheader(f"Plagiarism Score: {result['percent']}%")
+                st.write(f"Matched Sentences: {result['copied']} / {result['total']}")
+                st.write("---")
+                st.subheader("Detailed Comparison:")
+                for row in result["details"]:
+                    st.write(f"📌 Sentence: **{row['sentence']}**")
+                    st.write(f"🔍 Match Score: **{row['score']}**")
+                    st.write(f"📝 Match Found: {row['best_match']}")
+                    st.write("---")
         else:
-            st.warning("Enter content first")
+            st.warning("Enter text first")
     if st.button("Back"): st.session_state.page="menu"
+
 
 
 elif st.session_state.page=="resume":
