@@ -220,7 +220,7 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>📝<br>Content Generator</div>", unsafe_allow_html=True)
         if st.button("Content Gen"): st.session_state.page="content"
     with c3:
-        st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
+        st.markmarkdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
     c4,c5,c6 = st.columns(3)
@@ -359,7 +359,7 @@ elif st.session_state.page=="converter":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# IMAGE ANALYZER (Fixed)
+# ===================== FIXED IMAGE ANALYZER =====================
 elif st.session_state.page=="img_analyzer":
     st.title("🖼 Image Analyzer")
 
@@ -373,18 +373,21 @@ elif st.session_state.page=="img_analyzer":
             with st.spinner("Analyzing image..."):
 
                 try:
-                    # NEW working Pollinations caption API
-                    resp = requests.post(
-                        "https://image.pollinations.ai/api/caption",
-                        files={"image": ("image.jpg", img_bytes, "image/jpeg")},
-                        timeout=20
+                    # STEP 1: Image → Caption (Hugging Face BLIP)
+                    hf_resp = requests.post(
+                        "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
+                        headers={"Content-Type": "application/octet-stream"},
+                        data=img_bytes
                     )
 
-                    data = resp.json()
+                    try:
+                        hf_data = hf_resp.json()
+                        caption = hf_data[0]["generated_text"]
+                    except:
+                        caption = "Unable to generate caption"
 
-                    caption = data.get("caption", "No caption detected")
-
-                    prompt = f"Explain this image based on the caption:\n\"{caption}\""
+                    # STEP 2: Caption → Detailed Interpretation (Groq)
+                    prompt = f"Explain the image based on this caption:\n\"{caption}\""
                     r = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[{"role":"user","content":prompt}]
