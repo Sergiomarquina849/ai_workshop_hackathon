@@ -175,7 +175,6 @@ Analyze this resume strictly in JSON with:
 - strengths: list
 - weaknesses: list
 - roles: list
-Do not add explanation.
 
 Resume:
 \"\"\"{text}\"\"\"
@@ -185,8 +184,7 @@ Resume:
         messages=[{"role":"user","content":prompt}]
     )
     try:
-        data = json.loads(r.choices[0].message.content)
-        return data
+        return json.loads(r.choices[0].message.content)
     except:
         return None
 
@@ -212,6 +210,7 @@ if st.session_state.page=="welcome":
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
 
+    # Row 1
     c1,c2,c3 = st.columns(3)
     with c1:
         st.markdown("<div class='feature-card'>🤖<br>Chatbot</div>", unsafe_allow_html=True)
@@ -223,6 +222,7 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
+    # Row 2
     c4,c5,c6 = st.columns(3)
     with c4:
         st.markdown("<div class='feature-card'>🖼<br>Text → Image</div>", unsafe_allow_html=True)
@@ -234,14 +234,12 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>📄<br>PDF/Text Summarizer</div>", unsafe_allow_html=True)
         if st.button("Summarize PDF/TXT"): st.session_state.page="pdf_summary"
 
-    c7,c8,c9 = st.columns(3)
+    # Row 3
+    c7,c8 = st.columns(2)
     with c7:
         st.markdown("<div class='feature-card'>🔁<br>File Converter</div>", unsafe_allow_html=True)
         if st.button("Converter"): st.session_state.page="converter"
     with c8:
-        st.markdown("<div class='feature-card'>🖼<br>Image Analyzer</div>", unsafe_allow_html=True)
-        if st.button("Analyze Image"): st.session_state.page="img_analyzer"
-    with c9:
         st.markdown("<div class='feature-card'>📑<br>Resume Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Resume"): st.session_state.page="resume"
 
@@ -277,7 +275,8 @@ elif st.session_state.page=="content":
 elif st.session_state.page=="analyzer":
     st.title("🌍 Website Analyzer")
     url = st.text_input("Website URL:")
-    if st.button("Analyze"): st.write(analyze_website(url, client))
+    if st.button("Analyze"):
+        st.write(analyze_website(url, client))
     if st.button("Back"): st.session_state.page="menu"
 
 
@@ -289,8 +288,10 @@ elif st.session_state.page=="image":
         formatted = prompt.replace(" ", "+")
         url = f"https://image.pollinations.ai/prompt/{formatted}"
         r = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
-        if r.status_code==200: st.image(r.content)
-        else: st.error("Failed to generate image")
+        if r.status_code==200:
+            st.image(r.content)
+        else:
+            st.error("Failed to generate image")
     if st.button("Back"): st.session_state.page="menu"
 
 
@@ -299,42 +300,30 @@ elif st.session_state.page=="compare2":
     st.title("📊 Website Comparator")
     u1 = st.text_input("Website 1:")
     u2 = st.text_input("Website 2:")
-    if st.button("Compare"): st.write(compare_websites(u1, u2, client))
+    if st.button("Compare"):
+        st.write(compare_websites(u1, u2, client))
     if st.button("Back"): st.session_state.page="menu"
 
 
 # PDF/TEXT SUMMARIZER
 elif st.session_state.page=="pdf_summary":
     st.title("📄 PDF / Text Summarizer")
-
     file = st.file_uploader("Upload PDF or TXT:", type=["pdf","txt"])
     text_input = st.text_area("Or paste text:")
-
     if st.button("Summarize"):
-
-        extracted_text = ""
-
+        extracted = ""
         if file:
             ext = file.name.split(".")[-1].lower()
-            if ext=="pdf":
-                extracted_text = pdf_to_text(file)
-            elif ext=="txt":
-                extracted_text = file.read().decode()
-
+            if ext=="pdf": extracted = pdf_to_text(file)
+            elif ext=="txt": extracted = file.read().decode()
         elif text_input.strip():
-            extracted_text = text_input
-
-        if extracted_text.strip():
-            prompt = f"Summarize this text:\n{extracted_text}"
-            r = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role":"user","content":prompt}]
-            )
-            st.subheader("📝 Summary:")
+            extracted = text_input
+        if extracted.strip():
+            prompt = f"Summarize this:\n{extracted}"
+            r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
             st.write(r.choices[0].message.content)
         else:
-            st.warning("No text found to summarize.")
-
+            st.warning("No text found")
     if st.button("Back"): st.session_state.page="menu"
 
 
@@ -343,7 +332,6 @@ elif st.session_state.page=="converter":
     st.title("🔁 Universal File Converter")
     file = st.file_uploader("Upload file:", type=["pdf","docx","txt"])
     output = st.selectbox("Convert to:", ["TXT","PDF","DOCX"])
-
     if st.button("Convert"):
         if file:
             ext = file.name.split(".")[-1].lower()
@@ -359,83 +347,28 @@ elif st.session_state.page=="converter":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== FIXED IMAGE ANALYZER =====================
-elif st.session_state.page=="img_analyzer":
-    st.title("🖼 Image Analyzer")
-
-    uploaded = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
-
-    if uploaded:
-        img_bytes = uploaded.read()
-        st.image(img_bytes, caption="Uploaded Image", use_column_width=True)
-
-        if st.button("Analyze Image"):
-            with st.spinner("Analyzing image..."):
-
-                try:
-                    # STEP 1: Image → Caption (Hugging Face BLIP)
-                    hf_resp = requests.post(
-                        "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-base",
-                        headers={"Content-Type": "application/octet-stream"},
-                        data=img_bytes
-                    )
-
-                    try:
-                        hf_data = hf_resp.json()
-                        caption = hf_data[0]["generated_text"]
-                    except:
-                        caption = "Unable to generate caption"
-
-                    # STEP 2: Caption → Detailed Interpretation (Groq)
-                    prompt = f"Explain the image based on this caption:\n\"{caption}\""
-                    r = client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=[{"role":"user","content":prompt}]
-                    )
-
-                    st.subheader("📌 Basic Caption:")
-                    st.write(caption)
-
-                    st.subheader("🧠 Detailed Interpretation:")
-                    st.write(r.choices[0].message.content)
-
-                except Exception as e:
-                    st.error(f"Error analyzing image: {e}")
-
-    if st.button("Back"): st.session_state.page="menu"
-
-
 # RESUME ANALYZER
 elif st.session_state.page=="resume":
     st.title("📑 Resume Analyzer")
     file = st.file_uploader("Upload Resume (PDF/DOCX):", type=["pdf","docx"])
-
     if st.button("Analyze Resume"):
         if file:
             ext = file.name.split(".")[-1].lower()
-            txt = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file)
-
-            data = analyze_resume(txt, client)
-
+            text = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file)
+            data = analyze_resume(text, client)
             if data:
                 score = int(data.get("score", 0))
-
                 st.subheader("📊 ATS Score")
                 st.progress(score/100)
                 st.write(f"**Score:** {score}/100")
-
                 st.subheader("💪 Strengths")
                 st.write(data.get("strengths", []))
-
                 st.subheader("⚠ Weaknesses")
                 st.write(data.get("weaknesses", []))
-
                 st.subheader("🎯 Suitable Job Roles")
                 st.write(data.get("roles", []))
-
             else:
-                st.error("Could not parse resume output.")
+                st.error("Could not parse resume.")
         else:
             st.warning("Upload resume first")
-            
     if st.button("Back"): st.session_state.page="menu"
