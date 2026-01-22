@@ -7,7 +7,6 @@ import io
 import re
 
 from google.oauth2 import service_account
-from google.cloud import vision
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -17,7 +16,25 @@ from docx import Document
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-from fuzzywuzzy import fuzz
+from PIL import Image
+import torch
+from transformers import BlipProcessor, BlipForConditionalGeneration
+
+
+# ===================== IMAGE CAPTION MODEL =====================
+@st.cache_resource
+def load_blip():
+    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+    return processor, model
+
+processor, blip_model = load_blip()
+
+
+def generate_caption(image: Image.Image):
+    inputs = processor(image, return_tensors="pt")
+    out = blip_model.generate(**inputs)
+    return processor.decode(out[0], skip_special_tokens=True)
 
 
 # ===================== FUTURISTIC UI THEME =====================
@@ -80,36 +97,6 @@ def inject_css():
 
 
 
-# ===================== GOOGLE SERVICE AUTH =====================
-def get_drive_service():
-    creds_info = st.secrets["gcp_service_account"]
-    creds = service_account.Credentials.from_service_account_info(
-        creds_info, scopes=["https://www.googleapis.com/auth/drive.file"]
-    )
-    return build('drive','v3',credentials=creds)
-
-
-def get_vision_client():
-    creds_info = st.secrets["gcp_service_account"]
-    creds = service_account.Credentials.from_service_account_info(
-        creds_info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
-    return vision.ImageAnnotatorClient(credentials=creds)
-
-
-def upload_to_drive(filename, text):
-    service = get_drive_service()
-    fh = io.BytesIO(text.encode('utf-8'))
-    media = MediaIoBaseUpload(fh, mimetype='text/plain', resumable=True)
-    file = service.files().create(
-        body={'name': filename, 'mimeType':'text/plain'},
-        media_body=media,
-        fields='id,name'
-    ).execute()
-    return file.get('id'), file.get('name')
-
-
-
 # ===================== WEBSITE UTILITIES =====================
 def extract_visible_text(html):
     soup = BeautifulSoup(html,"html.parser")
@@ -125,7 +112,7 @@ def analyze_website(url, client):
     text = extract_visible_text(response.text)[:6000]
 
     prompt = f"""
-Summarize this website with:
+Summarize the website in structured form:
 - Purpose
 - Key Sections
 - Offerings
@@ -176,62 +163,34 @@ def pdf_to_text(file):
     text = ""
     for page in pdf.pages:
         extracted = page.extract_text()
-        if extracted:
-            text += extracted + "\n"
+        if extracted: text += extracted + "\n"
     return text
 
 
 
 # ===================== FILE CONVERTER =====================
 def read_pdf(file):
-    pdf = PyPDF2.PdfReader(file)
-    text = ""
-    for page in pdf.pages:
-        extracted = page.extract_text()
-        if extracted:
-            text += extracted + "\n"
-    return text
+    return pdf_to_text(file)
 
 def read_docx(file):
     return docx2txt.process(file)
 
 def convert_txt_to_docx(text):
     doc = Document()
-    for line in text.split("\n"):
-        doc.add_paragraph(line)
-    buf = io.BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf
+    for line in text.split("\n"): doc.add_paragraph(line)
+    buf = io.BytesIO(); doc.save(buf); buf.seek(0); return buf
 
 def convert_txt_to_pdf(text):
     buf = io.BytesIO()
     styles = getSampleStyleSheet()
-    story = []
-    for line in text.split("\n"):
-        story.append(Paragraph(line, styles['Normal']))
-        story.append(Spacer(1, 4))
-    pdf = SimpleDocTemplate(buf)
-    pdf.build(story)
-    buf.seek(0)
-    return buf
-
-
-
-# ===================== CUSTOM SENTENCE SPLITTER =====================
-def simple_sentence_split(text):
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-    return [s.strip() for s in sentences if len(s.strip())>0]
+    story = [Paragraph(line, styles['Normal']) for line in text.split("\n")]
+    pdf = SimpleDocTemplate(buf); pdf.build(story); buf.seek(0); return buf
 
 
 
 # ===================== RESUME ANALYZER =====================
 def extract_skills(text):
-    skills_db = [
-        "python","java","c","c++","javascript","sql","html","css",
-        "machine learning","deep learning","communication","teamwork",
-        "ai","ml","docker","react","node","linux","cloud","devops","flask"
-    ]
+    skills_db = ["python","java","c","c++","javascript","sql","html","css","machine learning","deep learning","communication","teamwork","ai","ml","docker","react","node","linux","cloud","devops","flask"]
     return [s for s in skills_db if s.lower() in text.lower()]
 
 def analyze_resume(text, client):
@@ -245,7 +204,6 @@ Analyze this resume:
 - Suitable job roles
 - Skills Found: {skills}
 
-Resume:
 \"\"\"{text}\"\"\"
 """
     r = client.chat.completions.create(
@@ -253,47 +211,6 @@ Resume:
         messages=[{"role":"user","content":prompt}]
     )
     return r.choices[0].message.content
-
-
-
-# ===================== IMAGE ANALYZER (NEW TOOL) =====================
-def analyze_image_features(image_bytes, client):
-    vision_client = get_vision_client()
-    image = vision.Image(content=image_bytes)
-
-    response = vision_client.label_detection(image=image)
-    labels = response.label_annotations
-
-    # Build structured description
-    result = []
-    for label in labels:
-        result.append({
-            "description": label.description,
-            "score": round(label.score * 100, 2)
-        })
-
-    # Summarize via LLM
-    prompt = f"""
-Analyze this set of detected image labels and describe the image content in detail.
-
-Labels:
-{json.dumps(result, indent=2)}
-
-Provide:
-- Overall scene description
-- Objects present
-- Environment
-- Possible purpose or context
-- Colors or themes if detectable
-- Accuracy notes
-"""
-
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
-
-    return result, r.choices[0].message.content
 
 
 
@@ -308,104 +225,87 @@ if "chat_history" not in st.session_state: st.session_state.chat_history=[]
 
 
 
-# ===================== PAGE ROUTER =====================
+# ===================== PAGE ROUTES =====================
+# WELCOME
 if st.session_state.page=="welcome":
     st.title("🌌 Welcome to Honnagiri Universe Tools")
-    if st.button("🚀 Enter"):
-        st.session_state.page="menu"
+    if st.button("🚀 Enter"): st.session_state.page="menu"
 
 
-
+# MENU
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
 
-    # Row 1
     c1,c2,c3 = st.columns(3)
     with c1:
         st.markdown("<div class='feature-card'>🤖<br>Chatbot</div>", unsafe_allow_html=True)
         if st.button("Chat"): st.session_state.page="chatbot"
-
     with c2:
         st.markdown("<div class='feature-card'>📝<br>Content Generator</div>", unsafe_allow_html=True)
         if st.button("Content Gen"): st.session_state.page="content"
-
     with c3:
         st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
-    # Row 2
     c4,c5,c6 = st.columns(3)
     with c4:
         st.markdown("<div class='feature-card'>🖼<br>Text → Image</div>", unsafe_allow_html=True)
         if st.button("Image Gen"): st.session_state.page="image"
-
     with c5:
         st.markdown("<div class='feature-card'>📊<br>Website Comparator</div>", unsafe_allow_html=True)
         if st.button("Compare Sites"): st.session_state.page="compare2"
-
     with c6:
         st.markdown("<div class='feature-card'>📄<br>PDF/Text Summarizer</div>", unsafe_allow_html=True)
         if st.button("Summarizer"): st.session_state.page="summarizer"
 
-    # Row 3
     c7,c8,c9 = st.columns(3)
     with c7:
         st.markdown("<div class='feature-card'>🔁<br>File Converter</div>", unsafe_allow_html=True)
         if st.button("Converter"): st.session_state.page="converter"
-
     with c8:
-        st.markdown("<div class='feature-card'>🖼<br>Image Feature Analyzer</div>", unsafe_allow_html=True)
-        if st.button("Image Analyzer"): st.session_state.page="img_analyzer"   # REPLACED PAGE
-
+        st.markdown("<div class='feature-card'>🖼<br>Image Analyzer</div>", unsafe_allow_html=True)
+        if st.button("Analyze Image"): st.session_state.page="img_analyzer"
     with c9:
         st.markdown("<div class='feature-card'>📑<br>Resume Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Resume"): st.session_state.page="resume"
 
-    if st.button("🔙 Exit"):
-        st.session_state.page="welcome"
+    if st.button("🔙 Exit"): st.session_state.page="welcome"
 
 
-
+# CHATBOT
 elif st.session_state.page=="chatbot":
     st.title("🤖 Chatbot")
     msg = st.text_input("Your message:")
     if msg:
         st.session_state.chat_history.append({"role":"user","content":msg})
-        r = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=st.session_state.chat_history
-        )
+        r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=st.session_state.chat_history)
         st.session_state.chat_history.append({"role":"assistant","content":r.choices[0].message.content})
     for chat in st.session_state.chat_history:
         st.write(f"**{'You' if chat['role']=='user' else 'Bot'}:** {chat['content']}")
     if st.button("Back"): st.session_state.page="menu"
 
 
-
+# CONTENT GENERATOR
 elif st.session_state.page=="content":
     st.title("📝 Content Generator")
     topic = st.text_input("Topic:")
     audience = st.text_input("Audience:")
     if st.button("Generate"):
         prompt = f"Write marketing content about '{topic}' for '{audience}'."
-        r = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role":"user","content":prompt}]
-        )
+        r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
         st.write(r.choices[0].message.content)
     if st.button("Back"): st.session_state.page="menu"
 
 
-
+# WEBSITE ANALYZER
 elif st.session_state.page=="analyzer":
     st.title("🌍 Website Analyzer")
     url = st.text_input("Website URL:")
-    if st.button("Analyze"):
-        st.write(analyze_website(url, client))
+    if st.button("Analyze"): st.write(analyze_website(url, client))
     if st.button("Back"): st.session_state.page="menu"
 
 
-
+# TEXT→IMAGE
 elif st.session_state.page=="image":
     st.title("🖼 Text → Image Generator")
     prompt = st.text_input("Describe image:")
@@ -413,24 +313,20 @@ elif st.session_state.page=="image":
         formatted = prompt.replace(" ", "+")
         img_url = f"https://image.pollinations.ai/prompt/{formatted}"
         r = requests.get(img_url, headers={"User-Agent":"Mozilla/5.0"})
-        if r.status_code==200:
-            st.image(r.content)
-        else:
-            st.error("Failed to generate image")
+        st.image(r.content if r.status_code==200 else None)
     if st.button("Back"): st.session_state.page="menu"
 
 
-
+# WEBSITE COMPARATOR
 elif st.session_state.page=="compare2":
     st.title("📊 Website Comparator")
     u1 = st.text_input("Website 1:")
     u2 = st.text_input("Website 2:")
-    if st.button("Compare Now"):
-        st.write(compare_websites(u1, u2, client))
+    if st.button("Compare"): st.write(compare_websites(u1, u2, client))
     if st.button("Back"): st.session_state.page="menu"
 
 
-
+# SUMMARIZER
 elif st.session_state.page=="summarizer":
     st.title("📄 PDF/Text Summarizer")
     file = st.file_uploader("Upload PDF/DOCX/TXT:", type=["pdf","docx","txt"])
@@ -438,22 +334,17 @@ elif st.session_state.page=="summarizer":
     if st.button("Summarize"):
         if file:
             ext = file.name.split(".")[-1].lower()
-            if ext=="pdf": txt = pdf_to_text(file)
-            elif ext=="docx": txt = docx2txt.process(file)
-            elif ext=="txt": txt = file.read().decode()
+            txt = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file) if ext=="docx" else file.read().decode()
         if txt.strip():
             prompt = f"Summarize:\n{txt}"
-            r = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role":"user","content":prompt}]
-            )
+            r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
             st.write(r.choices[0].message.content)
         else:
-            st.warning("No content found")
+            st.warning("No content provided")
     if st.button("Back"): st.session_state.page="menu"
 
 
-
+# FILE CONVERTER
 elif st.session_state.page=="converter":
     st.title("🔁 Universal File Converter")
     file = st.file_uploader("Upload file:", type=["pdf","docx","txt"])
@@ -461,58 +352,48 @@ elif st.session_state.page=="converter":
     if st.button("Convert"):
         if file:
             ext = file.name.split(".")[-1].lower()
-
-            if ext=="pdf": text = read_pdf(file)
-            elif ext=="docx": text = read_docx(file)
-            else: text = file.read().decode()
-
-            if output=="TXT":
-                st.download_button("Download TXT", text, file_name=file.name.replace(ext,"txt"))
-            elif output=="DOCX":
-                buf = convert_txt_to_docx(text)
-                st.download_button("Download DOCX", buf, file_name=file.name.replace(ext,"docx"))
-            elif output=="PDF":
-                buf = convert_txt_to_pdf(text)
-                st.download_button("Download PDF", buf, file_name=file.name.replace(ext,"pdf"))
+            text = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file) if ext=="docx" else file.read().decode()
+            if output=="TXT": st.download_button("Download TXT", text, file_name=file.name.replace(ext,"txt"))
+            elif output=="DOCX": st.download_button("Download DOCX", convert_txt_to_docx(text), file_name=file.name.replace(ext,"docx"))
+            elif output=="PDF": st.download_button("Download PDF", convert_txt_to_pdf(text), file_name=file.name.replace(ext,"pdf"))
         else:
             st.warning("Upload a file first")
     if st.button("Back"): st.session_state.page="menu"
 
 
-
-# ===================== NEW IMAGE ANALYZER TOOL =====================
+# NEW IMAGE ANALYZER
 elif st.session_state.page=="img_analyzer":
-    st.title("🖼 Image Feature Analyzer")
-    uploaded = st.file_uploader("Upload an image (PNG/JPG):", type=["png","jpg","jpeg"])
+    st.title("🖼 Image Analyzer (BLIP + Groq)")
+    uploaded = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
+
     if uploaded:
-        img_bytes = uploaded.read()
-        st.image(img_bytes, caption="Uploaded Image", use_column_width=True)
+        img = Image.open(uploaded).convert("RGB")
+        st.image(img, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Analyze Image"):
-            with st.spinner("Recognizing objects..."):
-                labels, description = analyze_image_features(img_bytes, client)
+            with st.spinner("Analyzing image..."):
+                raw_caption = generate_caption(img)
 
-                st.subheader("🧩 Detected Features:")
-                for item in labels:
-                    st.write(f"• {item['description']} — {item['score']}% confidence")
+                prompt = f"Expand the following short image caption into a detailed explanation: \"{raw_caption}\""
+                r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+
+                st.subheader("📝 Raw Visual Caption:")
+                st.write(raw_caption)
 
                 st.subheader("🧠 Detailed Interpretation:")
-                st.write(description)
+                st.write(r.choices[0].message.content)
 
     if st.button("Back"): st.session_state.page="menu"
 
 
-
+# RESUME ANALYZER
 elif st.session_state.page=="resume":
     st.title("📑 Resume Analyzer")
     file = st.file_uploader("Upload Resume (PDF/DOCX):", type=["pdf","docx"])
     if st.button("Analyze Resume"):
         if file:
             ext = file.name.split(".")[-1].lower()
-            if ext=="pdf":
-                txt = pdf_to_text(file)
-            else:
-                txt = docx2txt.process(file)
+            txt = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file)
             st.write(analyze_resume(txt, client))
         else:
             st.warning("Upload resume first")
