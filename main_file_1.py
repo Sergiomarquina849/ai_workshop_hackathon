@@ -6,10 +6,6 @@ import json
 import io
 import re
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-
 import PyPDF2
 import docx2txt
 from docx import Document
@@ -17,23 +13,6 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 
 from PIL import Image
-import torch
-from transformers import BlipProcessor, BlipForConditionalGeneration
-
-
-# ===================== BLIP IMAGE CAPTION =====================
-@st.cache_resource
-def load_blip_model():
-    processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-    model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-    return processor, model
-
-processor, blip_model = load_blip_model()
-
-def generate_caption(image: Image.Image):
-    inputs = processor(image, return_tensors="pt")
-    out = blip_model.generate(**inputs)
-    return processor.decode(out[0], skip_special_tokens=True)
 
 
 # ===================== THEME =====================
@@ -103,7 +82,7 @@ def extract_visible_text(html):
     return " ".join(soup.stripped_strings)
 
 
-# ===================== SITE ANALYZER =====================
+# ===================== WEBSITE ANALYZER =====================
 def analyze_website(url, client):
     response = requests.get(url, timeout=10)
     text = extract_visible_text(response.text)[:6000]
@@ -126,7 +105,7 @@ Content:
     return r.choices[0].message.content
 
 
-# ===================== SITE COMPARATOR =====================
+# ===================== WEBSITE COMPARATOR =====================
 def compare_websites(url1, url2, client):
     A = extract_visible_text(requests.get(url1).text)[:5000]
     B = extract_visible_text(requests.get(url2).text)[:5000]
@@ -159,8 +138,7 @@ def pdf_to_text(file):
     text = ""
     for page in pdf.pages:
         extracted = page.extract_text()
-        if extracted:
-            text += extracted + "\n"
+        if extracted: text += extracted + "\n"
     return text
 
 
@@ -170,14 +148,21 @@ def read_docx(file): return docx2txt.process(file)
 
 def convert_txt_to_docx(text):
     doc = Document()
-    for line in text.split("\n"): doc.add_paragraph(line)
-    buf = io.BytesIO(); doc.save(buf); buf.seek(0); return buf
+    for line in text.split("\n"):
+        doc.add_paragraph(line)
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
 
 def convert_txt_to_pdf(text):
     buf = io.BytesIO()
     styles = getSampleStyleSheet()
     story = [Paragraph(line, styles['Normal']) for line in text.split("\n")]
-    pdf = SimpleDocTemplate(buf); pdf.build(story); buf.seek(0); return buf
+    pdf = SimpleDocTemplate(buf)
+    pdf.build(story)
+    buf.seek(0)
+    return buf
 
 
 # ===================== RESUME ANALYZER =====================
@@ -358,26 +343,44 @@ elif st.session_state.page=="converter":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# IMAGE ANALYZER (New Tool Instead of Plagiarism)
+# IMAGE ANALYZER (Replacing Plagiarism)
 elif st.session_state.page=="img_analyzer":
-    st.title("🖼 Image Analyzer (BLIP + Groq)")
+    st.title("🖼 Image Analyzer")
+    
     uploaded = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
 
     if uploaded:
-        img = Image.open(uploaded).convert("RGB")
-        st.image(img, caption="Uploaded Image", use_column_width=True)
+        img_bytes = uploaded.read()
+        st.image(img_bytes, caption="Uploaded Image", use_column_width=True)
 
         if st.button("Analyze Image"):
             with st.spinner("Analyzing image..."):
-                raw = generate_caption(img)
-                prompt = f"Expand this short caption into a detailed scene description:\n\"{raw}\""
-                r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
 
-                st.subheader("📌 Raw Caption:")
-                st.write(raw)
+                try:
+                    # Pollinations caption endpoint
+                    resp = requests.post(
+                        "https://image.pollinations.ai/caption",
+                        files={"image": img_bytes},
+                        timeout=20
+                    )
+                    caption = resp.text.strip()
 
-                st.subheader("🧠 AI Detailed Interpretation:")
-                st.write(r.choices[0].message.content)
+                    # Expand caption with Groq
+                    prompt = f"Expand this short image caption into a detailed visual description:\n\"{caption}\""
+                    
+                    r = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[{"role":"user","content":prompt}]
+                    )
+
+                    st.subheader("📌 Basic Caption:")
+                    st.write(caption)
+
+                    st.subheader("🧠 Detailed Interpretation:")
+                    st.write(r.choices[0].message.content)
+
+                except Exception as e:
+                    st.error(f"Error analyzing image: {e}")
 
     if st.button("Back"): st.session_state.page="menu"
 
