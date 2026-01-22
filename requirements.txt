@@ -6,12 +6,11 @@ PyPDF2
 python-docx
 docx2txt
 reportlab
-pypdf
 fuzzywuzzy
 python-Levenshtein
-scikit-learn
 google-auth
 google-auth-oauthlib
 google-api-python-client
-google-cloud-vision
-
+Pillow
+torch
+transformers
