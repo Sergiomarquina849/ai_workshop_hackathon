@@ -11,17 +11,11 @@ from googleapiclient.http import MediaIoBaseUpload
 
 import PyPDF2
 import docx2txt
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
 from docx import Document
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-import nltk
 from fuzzywuzzy import fuzz
-nltk.download('punkt')
-
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 
 # ===================== FUTURISTIC UI THEME =====================
@@ -118,16 +112,19 @@ def analyze_website(url, client):
     text = extract_visible_text(response.text)[:6000]
 
     prompt = f"""
-Analyze and summarize this website in bullet points covering:
+Summarize this website with:
 - Purpose
 - Key Sections
-- Offerings
+- Main Offerings
 - Target Audience
 
 Content:
 \"\"\"{text}\"\"\"
 """
-    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role":"user","content":prompt}]
+    )
     return r.choices[0].message.content
 
 
@@ -137,7 +134,8 @@ def compare_websites(url1, url2, client):
     B = extract_visible_text(requests.get(url2).text)[:5000]
 
     prompt = f"""
-Compare these two websites based on:
+Compare these two websites:
+Criteria:
 - Purpose
 - Audience
 - Offerings
@@ -145,13 +143,16 @@ Compare these two websites based on:
 - Differences
 - Summary
 
-=== WEBSITE A ===
+SITE A:
 {A}
 
-=== WEBSITE B ===
+SITE B:
 {B}
 """
-    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role":"user","content":prompt}]
+    )
     return r.choices[0].message.content
 
 
@@ -167,14 +168,17 @@ def pdf_to_text(file):
 
 def summarize_text(text, client):
     prompt = f"""
-Summarize this content into:
+Summarize this text into:
 - Bullet key points
-- 5-10 line summary
+- 5-10 sentence summary
 
-Content:
+Text:
 \"\"\"{text}\"\"\"
 """
-    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role":"user","content":prompt}]
+    )
     return r.choices[0].message.content
 
 
@@ -213,9 +217,16 @@ def convert_txt_to_pdf(text):
     return buf
 
 
+# ===================== CUSTOM SENTENCE SPLITTER (NO NLTK) =====================
+import re
+def simple_sentence_split(text):
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    return [s.strip() for s in sentences if len(s.strip()) > 0]
+
+
 # ===================== FREE WEB PLAGIARISM CHECKER =====================
 def free_web_plagiarism_check(text, client):
-    sentences = nltk.sent_tokenize(text)
+    sentences = simple_sentence_split(text)
     queries = sentences[:3]
 
     matches = []
@@ -227,27 +238,29 @@ def free_web_plagiarism_check(text, client):
 
         snippets = soup.select(".result__snippet")
         for s in snippets[:3]:
-            snip = s.get_text()
-            score = fuzz.ratio(q.lower(), snip.lower())
+            snippet = s.get_text()
+            score = fuzz.ratio(q.lower(), snippet.lower())
             if score > 40:
-                matches.append({"input": q, "snippet": snip, "score": score})
+                matches.append({"input": q, "snippet": snippet, "score": score})
 
     prompt = f"""
-Perform plagiarism evaluation.
-
+Perform plagiarism analysis.
 Source Text:
 \"\"\"{text}\"\"\"
 
-Matches Found:
+Matches:
 {json.dumps(matches, indent=2)}
 
 Return:
 - Estimated plagiarism percentage
 - Copied sentences
-- Unique content
-- Final assessment
+- Unique content explanation
+- Final judgment
 """
-    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role":"user","content":prompt}]
+    )
     return r.choices[0].message.content
 
 
@@ -263,18 +276,21 @@ def extract_skills(text):
 def analyze_resume(text, client):
     skills = extract_skills(text)
     prompt = f"""
-Analyze this resume and provide:
+Analyze this resume. Provide:
 - ATS Score (0-100)
 - Strengths
 - Weaknesses
-- Suggested Improvements
-- Suitable Roles
+- Improvements
+- Suitable job roles
 - Detected Skills: {skills}
 
 Resume:
 \"\"\"{text}\"\"\"
 """
-    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role":"user","content":prompt}]
+    )
     return r.choices[0].message.content
 
 
@@ -286,8 +302,6 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 if "page" not in st.session_state: st.session_state.page="welcome"
 if "chat_history" not in st.session_state: st.session_state.chat_history=[]
-if "generated_text" not in st.session_state: st.session_state.generated_text=""
-
 
 # ===================== PAGE ROUTING =====================
 if st.session_state.page=="welcome":
@@ -344,32 +358,35 @@ elif st.session_state.page=="menu":
     if st.button("🔙 Exit"): st.session_state.page="welcome"
 
 
-# ===================== CHATBOT =====================
 elif st.session_state.page=="chatbot":
     st.title("🤖 Chatbot")
     msg = st.text_input("Your message:")
     if msg:
         st.session_state.chat_history.append({"role":"user","content":msg})
-        r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=st.session_state.chat_history)
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=st.session_state.chat_history
+        )
         st.session_state.chat_history.append({"role":"assistant","content":r.choices[0].message.content})
     for chat in st.session_state.chat_history:
         st.write(f"**{'You' if chat['role']=='user' else 'Bot'}:** {chat['content']}")
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== CONTENT GENERATOR =====================
 elif st.session_state.page=="content":
     st.title("📝 Content Generator")
     topic = st.text_input("Topic:")
     audience = st.text_input("Audience:")
     if st.button("Generate"):
         prompt = f"Write marketing content about '{topic}' for '{audience}'."
-        r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+        r = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role":"user","content":prompt}]
+        )
         st.write(r.choices[0].message.content)
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== WEBSITE ANALYZER =====================
 elif st.session_state.page=="analyzer":
     st.title("🌍 Website Analyzer")
     url = st.text_input("Website URL:")
@@ -378,7 +395,6 @@ elif st.session_state.page=="analyzer":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== IMAGE GENERATOR =====================
 elif st.session_state.page=="image":
     st.title("🖼 Text → Image Generator")
     prompt = st.text_input("Describe image:")
@@ -393,7 +409,6 @@ elif st.session_state.page=="image":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== WEBSITE COMPARATOR =====================
 elif st.session_state.page=="compare2":
     st.title("📊 Website Comparator")
     u1 = st.text_input("Website 1:")
@@ -403,7 +418,6 @@ elif st.session_state.page=="compare2":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== PDF/TEXT SUMMARIZER =====================
 elif st.session_state.page=="summarizer":
     st.title("📄 PDF/Text Summarizer")
     file = st.file_uploader("Upload PDF/DOCX/TXT:", type=["pdf","docx","txt"])
@@ -421,24 +435,18 @@ elif st.session_state.page=="summarizer":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== FILE CONVERTER =====================
 elif st.session_state.page=="converter":
     st.title("🔁 Universal File Converter")
-
     file = st.file_uploader("Upload file:", type=["pdf","docx","txt"])
     output = st.selectbox("Convert to:", ["TXT","PDF","DOCX"])
 
     if st.button("Convert"):
         if file:
             ext = file.name.split(".")[-1].lower()
-            text=""
 
-            if ext == "pdf":
-                text = read_pdf(file)
-            elif ext == "docx":
-                text = read_docx(file)
-            else:
-                text = file.read().decode("utf-8", errors="ignore")
+            if ext=="pdf": text = read_pdf(file)
+            elif ext=="docx": text = read_docx(file)
+            else: text = file.read().decode()
 
             if output=="TXT":
                 st.download_button("Download TXT", text, file_name=file.name.replace(ext,"txt"))
@@ -451,24 +459,21 @@ elif st.session_state.page=="converter":
         else:
             st.warning("Upload a file first")
 
-    if st.button("Back"):
-        st.session_state.page="menu"
+    if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== PLAGIARISM CHECKER =====================
 elif st.session_state.page=="plag":
     st.title("🕵️ Free Web Plagiarism Checker (No API Keys)")
     content = st.text_area("Paste text:")
     if st.button("Check Plagiarism"):
         if content.strip():
-            with st.spinner("Scanning the web for similarities..."):
+            with st.spinner("Searching web..."):
                 st.write(free_web_plagiarism_check(content, client))
         else:
             st.warning("Enter content first")
     if st.button("Back"): st.session_state.page="menu"
 
 
-# ===================== RESUME ANALYZER =====================
 elif st.session_state.page=="resume":
     st.title("📑 Resume Analyzer")
     file = st.file_uploader("Upload Resume (PDF/DOCX):", type=["pdf","docx"])
