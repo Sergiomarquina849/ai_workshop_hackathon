@@ -4,8 +4,10 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import io
+import re
 
 from google.oauth2 import service_account
+from google.cloud import vision
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
@@ -78,13 +80,22 @@ def inject_css():
 
 
 
-# ===================== GOOGLE DRIVE =====================
+# ===================== GOOGLE SERVICE AUTH =====================
 def get_drive_service():
     creds_info = st.secrets["gcp_service_account"]
     creds = service_account.Credentials.from_service_account_info(
         creds_info, scopes=["https://www.googleapis.com/auth/drive.file"]
     )
     return build('drive','v3',credentials=creds)
+
+
+def get_vision_client():
+    creds_info = st.secrets["gcp_service_account"]
+    creds = service_account.Credentials.from_service_account_info(
+        creds_info, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    return vision.ImageAnnotatorClient(credentials=creds)
+
 
 def upload_to_drive(filename, text):
     service = get_drive_service()
@@ -117,7 +128,7 @@ def analyze_website(url, client):
 Summarize this website with:
 - Purpose
 - Key Sections
-- Main Offerings
+- Offerings
 - Target Audience
 
 Content:
@@ -138,7 +149,6 @@ def compare_websites(url1, url2, client):
 
     prompt = f"""
 Compare these two websites:
-Criteria:
 - Purpose
 - Audience
 - Offerings
@@ -160,7 +170,7 @@ SITE B:
 
 
 
-# ===================== PDF/TEXT SUMMARIZER =====================
+# ===================== PDF TO TEXT =====================
 def pdf_to_text(file):
     pdf = PyPDF2.PdfReader(file)
     text = ""
@@ -209,55 +219,9 @@ def convert_txt_to_pdf(text):
 
 
 # ===================== CUSTOM SENTENCE SPLITTER =====================
-import re
 def simple_sentence_split(text):
     sentences = re.split(r'(?<=[.!?])\s+', text)
-    return [s.strip() for s in sentences if len(s.strip()) > 0]
-
-
-
-# ===================== IMPROVED PLAGIARISM CHECKER =====================
-def free_web_plagiarism_check(text):
-    sentences = simple_sentence_split(text)
-    queries = sentences[:5]  # take first 5 sentences max
-
-    results = []
-    total = len(queries)
-    copied = 0
-
-    for q in queries:
-        url = f"https://duckduckgo.com/html/?q={requests.utils.quote(q)}"
-        r = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        snippets = soup.select(".result__snippet")
-        best_score = 0
-        best_snippet = ""
-
-        for s in snippets[:3]:
-            snippet = s.get_text()
-            score = fuzz.ratio(q.lower(), snippet.lower())
-            if score > best_score:
-                best_score = score
-                best_snippet = snippet
-
-        results.append({
-            "sentence": q,
-            "best_match": best_snippet,
-            "score": best_score
-        })
-
-        if best_score > 50:
-            copied += 1
-
-    plagiarism_percentage = round((copied / total) * 100, 2) if total > 0 else 0
-
-    return {
-        "percent": plagiarism_percentage,
-        "copied": copied,
-        "total": total,
-        "details": results
-    }
+    return [s.strip() for s in sentences if len(s.strip())>0]
 
 
 
@@ -273,13 +237,13 @@ def extract_skills(text):
 def analyze_resume(text, client):
     skills = extract_skills(text)
     prompt = f"""
-Analyze this resume. Provide:
+Analyze this resume:
 - ATS Score (0-100)
 - Strengths
 - Weaknesses
-- Improvements
+- Suggestions
 - Suitable job roles
-- Detected Skills: {skills}
+- Skills Found: {skills}
 
 Resume:
 \"\"\"{text}\"\"\"
@@ -289,6 +253,47 @@ Resume:
         messages=[{"role":"user","content":prompt}]
     )
     return r.choices[0].message.content
+
+
+
+# ===================== IMAGE ANALYZER (NEW TOOL) =====================
+def analyze_image_features(image_bytes, client):
+    vision_client = get_vision_client()
+    image = vision.Image(content=image_bytes)
+
+    response = vision_client.label_detection(image=image)
+    labels = response.label_annotations
+
+    # Build structured description
+    result = []
+    for label in labels:
+        result.append({
+            "description": label.description,
+            "score": round(label.score * 100, 2)
+        })
+
+    # Summarize via LLM
+    prompt = f"""
+Analyze this set of detected image labels and describe the image content in detail.
+
+Labels:
+{json.dumps(result, indent=2)}
+
+Provide:
+- Overall scene description
+- Objects present
+- Environment
+- Possible purpose or context
+- Colors or themes if detectable
+- Accuracy notes
+"""
+
+    r = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role":"user","content":prompt}]
+    )
+
+    return result, r.choices[0].message.content
 
 
 
@@ -302,6 +307,7 @@ if "page" not in st.session_state: st.session_state.page="welcome"
 if "chat_history" not in st.session_state: st.session_state.chat_history=[]
 
 
+
 # ===================== PAGE ROUTER =====================
 if st.session_state.page=="welcome":
     st.title("🌌 Welcome to Honnagiri Universe Tools")
@@ -309,9 +315,11 @@ if st.session_state.page=="welcome":
         st.session_state.page="menu"
 
 
+
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
 
+    # Row 1
     c1,c2,c3 = st.columns(3)
     with c1:
         st.markdown("<div class='feature-card'>🤖<br>Chatbot</div>", unsafe_allow_html=True)
@@ -325,6 +333,7 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
+    # Row 2
     c4,c5,c6 = st.columns(3)
     with c4:
         st.markdown("<div class='feature-card'>🖼<br>Text → Image</div>", unsafe_allow_html=True)
@@ -338,20 +347,22 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>📄<br>PDF/Text Summarizer</div>", unsafe_allow_html=True)
         if st.button("Summarizer"): st.session_state.page="summarizer"
 
+    # Row 3
     c7,c8,c9 = st.columns(3)
     with c7:
         st.markdown("<div class='feature-card'>🔁<br>File Converter</div>", unsafe_allow_html=True)
         if st.button("Converter"): st.session_state.page="converter"
 
     with c8:
-        st.markdown("<div class='feature-card'>🕵️<br>Plagiarism Checker</div>", unsafe_allow_html=True)
-        if st.button("Check Plagiarism"): st.session_state.page="plag"
+        st.markdown("<div class='feature-card'>🖼<br>Image Feature Analyzer</div>", unsafe_allow_html=True)
+        if st.button("Image Analyzer"): st.session_state.page="img_analyzer"   # REPLACED PAGE
 
     with c9:
         st.markdown("<div class='feature-card'>📑<br>Resume Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Resume"): st.session_state.page="resume"
 
-    if st.button("🔙 Exit"): st.session_state.page="welcome"
+    if st.button("🔙 Exit"):
+        st.session_state.page="welcome"
 
 
 
@@ -412,8 +423,8 @@ elif st.session_state.page=="image":
 
 elif st.session_state.page=="compare2":
     st.title("📊 Website Comparator")
-    u1 = st.text_input("Website 1 URL:")
-    u2 = st.text_input("Website 2 URL:")
+    u1 = st.text_input("Website 1:")
+    u2 = st.text_input("Website 2:")
     if st.button("Compare Now"):
         st.write(compare_websites(u1, u2, client))
     if st.button("Back"): st.session_state.page="menu"
@@ -431,7 +442,7 @@ elif st.session_state.page=="summarizer":
             elif ext=="docx": txt = docx2txt.process(file)
             elif ext=="txt": txt = file.read().decode()
         if txt.strip():
-            prompt = f"Summarize this:\n{txt}"
+            prompt = f"Summarize:\n{txt}"
             r = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[{"role":"user","content":prompt}]
@@ -469,24 +480,25 @@ elif st.session_state.page=="converter":
 
 
 
-elif st.session_state.page=="plag":
-    st.title("🕵️ Improved Plagiarism Checker")
-    content = st.text_area("Paste text:")
-    if st.button("Scan Now"):
-        if content.strip():
-            with st.spinner("Scanning the web..."):
-                result = free_web_plagiarism_check(content)
-                st.subheader(f"Plagiarism Score: {result['percent']}%")
-                st.write(f"Matched Sentences: {result['copied']} / {result['total']}")
-                st.write("---")
-                st.subheader("Detailed Comparison:")
-                for row in result["details"]:
-                    st.write(f"📌 Sentence: **{row['sentence']}**")
-                    st.write(f"🔍 Match Score: **{row['score']}**")
-                    st.write(f"📝 Match Found: {row['best_match']}")
-                    st.write("---")
-        else:
-            st.warning("Enter text first")
+# ===================== NEW IMAGE ANALYZER TOOL =====================
+elif st.session_state.page=="img_analyzer":
+    st.title("🖼 Image Feature Analyzer")
+    uploaded = st.file_uploader("Upload an image (PNG/JPG):", type=["png","jpg","jpeg"])
+    if uploaded:
+        img_bytes = uploaded.read()
+        st.image(img_bytes, caption="Uploaded Image", use_column_width=True)
+
+        if st.button("Analyze Image"):
+            with st.spinner("Recognizing objects..."):
+                labels, description = analyze_image_features(img_bytes, client)
+
+                st.subheader("🧩 Detected Features:")
+                for item in labels:
+                    st.write(f"• {item['description']} — {item['score']}% confidence")
+
+                st.subheader("🧠 Detailed Interpretation:")
+                st.write(description)
+
     if st.button("Back"): st.session_state.page="menu"
 
 
