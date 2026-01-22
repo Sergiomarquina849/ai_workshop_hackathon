@@ -143,9 +143,6 @@ def pdf_to_text(file):
 
 
 # ===================== FILE CONVERTER =====================
-def read_pdf(file): return pdf_to_text(file)
-def read_docx(file): return docx2txt.process(file)
-
 def convert_txt_to_docx(text):
     doc = Document()
     for line in text.split("\n"):
@@ -173,21 +170,25 @@ def extract_skills(text):
 def analyze_resume(text, client):
     skills = extract_skills(text)
     prompt = f"""
-Analyze this resume:
-- ATS Score (0-100)
-- Skills Found: {skills}
-- Strengths
-- Weaknesses
-- Suggestions
-- Suitable job roles
+Analyze this resume strictly in JSON with:
+- score: ATS score 0-100
+- strengths: list
+- weaknesses: list
+- roles: list
+Do not add explanation.
 
+Resume:
 \"\"\"{text}\"\"\"
 """
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role":"user","content":prompt}]
     )
-    return r.choices[0].message.content
+    try:
+        data = json.loads(r.choices[0].message.content)
+        return data
+    except:
+        return None
 
 
 # ===================== STREAMLIT APP =====================
@@ -207,11 +208,10 @@ if st.session_state.page=="welcome":
     if st.button("🚀 Enter"): st.session_state.page="menu"
 
 
-# MENU (Layout A)
+# MENU
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
 
-    # Row 1
     c1,c2,c3 = st.columns(3)
     with c1:
         st.markdown("<div class='feature-card'>🤖<br>Chatbot</div>", unsafe_allow_html=True)
@@ -223,7 +223,6 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
-    # Row 2
     c4,c5,c6 = st.columns(3)
     with c4:
         st.markdown("<div class='feature-card'>🖼<br>Text → Image</div>", unsafe_allow_html=True)
@@ -233,9 +232,8 @@ elif st.session_state.page=="menu":
         if st.button("Compare Sites"): st.session_state.page="compare2"
     with c6:
         st.markdown("<div class='feature-card'>📄<br>PDF/Text Summarizer</div>", unsafe_allow_html=True)
-        if st.button("Summarizer"): st.session_state.page="summarizer"
+        if st.button("Summarize PDF/TXT"): st.session_state.page="pdf_summary"
 
-    # Row 3
     c7,c8,c9 = st.columns(3)
     with c7:
         st.markdown("<div class='feature-card'>🔁<br>File Converter</div>", unsafe_allow_html=True)
@@ -305,20 +303,38 @@ elif st.session_state.page=="compare2":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# SUMMARIZER
-elif st.session_state.page=="summarizer":
-    st.title("📄 PDF/Text Summarizer")
-    file = st.file_uploader("Upload PDF/DOCX/TXT:", type=["pdf","docx","txt"])
-    txt = st.text_area("Or paste text:")
+# PDF/TEXT SUMMARIZER
+elif st.session_state.page=="pdf_summary":
+    st.title("📄 PDF / Text Summarizer")
+
+    file = st.file_uploader("Upload PDF or TXT:", type=["pdf","txt"])
+    text_input = st.text_area("Or paste text:")
+
     if st.button("Summarize"):
+
+        extracted_text = ""
+
         if file:
             ext = file.name.split(".")[-1].lower()
-            txt = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file) if ext=="docx" else file.read().decode()
-        if txt.strip():
-            prompt = f"Summarize this:\n{txt}"
-            r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+            if ext=="pdf":
+                extracted_text = pdf_to_text(file)
+            elif ext=="txt":
+                extracted_text = file.read().decode()
+
+        elif text_input.strip():
+            extracted_text = text_input
+
+        if extracted_text.strip():
+            prompt = f"Summarize this text:\n{extracted_text}"
+            r = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role":"user","content":prompt}]
+            )
+            st.subheader("📝 Summary:")
             st.write(r.choices[0].message.content)
-        else: st.warning("No content found")
+        else:
+            st.warning("No text found to summarize.")
+
     if st.button("Back"): st.session_state.page="menu"
 
 
@@ -343,12 +359,11 @@ elif st.session_state.page=="converter":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# IMAGE ANALYZER (Replacing Plagiarism)
+# IMAGE ANALYZER
 elif st.session_state.page=="img_analyzer":
     st.title("🖼 Image Analyzer")
-    
-    uploaded = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
 
+    uploaded = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
     if uploaded:
         img_bytes = uploaded.read()
         st.image(img_bytes, caption="Uploaded Image", use_column_width=True)
@@ -357,7 +372,6 @@ elif st.session_state.page=="img_analyzer":
             with st.spinner("Analyzing image..."):
 
                 try:
-                    # Pollinations caption endpoint
                     resp = requests.post(
                         "https://image.pollinations.ai/caption",
                         files={"image": img_bytes},
@@ -365,9 +379,7 @@ elif st.session_state.page=="img_analyzer":
                     )
                     caption = resp.text.strip()
 
-                    # Expand caption with Groq
-                    prompt = f"Expand this short image caption into a detailed visual description:\n\"{caption}\""
-                    
+                    prompt = f"Explain this image from the caption:\n\"{caption}\""
                     r = client.chat.completions.create(
                         model="llama-3.3-70b-versatile",
                         messages=[{"role":"user","content":prompt}]
@@ -389,11 +401,33 @@ elif st.session_state.page=="img_analyzer":
 elif st.session_state.page=="resume":
     st.title("📑 Resume Analyzer")
     file = st.file_uploader("Upload Resume (PDF/DOCX):", type=["pdf","docx"])
+
     if st.button("Analyze Resume"):
         if file:
             ext = file.name.split(".")[-1].lower()
             txt = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file)
-            st.write(analyze_resume(txt, client))
+
+            data = analyze_resume(txt, client)
+
+            if data:
+                score = int(data.get("score", 0))
+
+                st.subheader("📊 ATS Score")
+                st.progress(score/100)
+                st.write(f"**Score:** {score}/100")
+
+                st.subheader("💪 Strengths")
+                st.write(data.get("strengths", []))
+
+                st.subheader("⚠ Weaknesses")
+                st.write(data.get("weaknesses", []))
+
+                st.subheader("🎯 Suitable Job Roles")
+                st.write(data.get("roles", []))
+
+            else:
+                st.error("Could not parse resume output.")
         else:
             st.warning("Upload resume first")
+            
     if st.button("Back"): st.session_state.page="menu"
