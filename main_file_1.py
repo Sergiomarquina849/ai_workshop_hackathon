@@ -13,12 +13,16 @@ import PyPDF2
 import docx2txt
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
+from docx import Document
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
 import nltk
 from fuzzywuzzy import fuzz
 nltk.download('punkt')
 
 from sklearn.feature_extraction.text import TfidfVectorizer
+
 
 # ===================== FUTURISTIC UI THEME =====================
 def inject_css():
@@ -156,7 +160,9 @@ def pdf_to_text(file):
     pdf = PyPDF2.PdfReader(file)
     text = ""
     for page in pdf.pages:
-        text += page.extract_text() or ""
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted + "\n"
     return text
 
 def summarize_text(text, client):
@@ -173,17 +179,38 @@ Content:
 
 
 # ===================== FILE CONVERTER =====================
-def convert_text_to_pdf(text):
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
-    y = height - 50
+def read_pdf(file):
+    pdf = PyPDF2.PdfReader(file)
+    text = ""
+    for page in pdf.pages:
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted + "\n"
+    return text
+
+def read_docx(file):
+    return docx2txt.process(file)
+
+def convert_txt_to_docx(text):
+    doc = Document()
     for line in text.split("\n"):
-        c.drawString(50, y, line[:120])
-        y -= 15
-    c.save()
-    buffer.seek(0)
-    return buffer
+        doc.add_paragraph(line)
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+def convert_txt_to_pdf(text):
+    buf = io.BytesIO()
+    styles = getSampleStyleSheet()
+    story = []
+    for line in text.split("\n"):
+        story.append(Paragraph(line, styles['Normal']))
+        story.append(Spacer(1, 4))
+    pdf = SimpleDocTemplate(buf)
+    pdf.build(story)
+    buf.seek(0)
+    return buf
 
 
 # ===================== FREE WEB PLAGIARISM CHECKER =====================
@@ -224,7 +251,7 @@ Return:
     return r.choices[0].message.content
 
 
-# ===================== RESUME ANALYZER (NO SPACY) =====================
+# ===================== RESUME ANALYZER =====================
 def extract_skills(text):
     skills_db = [
         "python","java","c","c++","javascript","sql","html","css",
@@ -383,7 +410,7 @@ elif st.session_state.page=="summarizer":
     txt = st.text_area("Or paste text:")
     if st.button("Summarize"):
         if file:
-            ext = file.name.split(".")[-1]
+            ext = file.name.split(".")[-1].lower()
             if ext=="pdf": txt = pdf_to_text(file)
             elif ext=="docx": txt = docx2txt.process(file)
             elif ext=="txt": txt = file.read().decode()
@@ -396,30 +423,36 @@ elif st.session_state.page=="summarizer":
 
 # ===================== FILE CONVERTER =====================
 elif st.session_state.page=="converter":
-    st.title("🔁 File Converter")
+    st.title("🔁 Universal File Converter")
+
     file = st.file_uploader("Upload file:", type=["pdf","docx","txt"])
     output = st.selectbox("Convert to:", ["TXT","PDF","DOCX"])
+
     if st.button("Convert"):
         if file:
-            ext = file.name.split(".")[-1]
+            ext = file.name.split(".")[-1].lower()
             text=""
-            if ext=="pdf": text = pdf_to_text(file)
-            elif ext=="docx": text = docx2txt.process(file)
-            else: text = file.read().decode()
+
+            if ext == "pdf":
+                text = read_pdf(file)
+            elif ext == "docx":
+                text = read_docx(file)
+            else:
+                text = file.read().decode("utf-8", errors="ignore")
 
             if output=="TXT":
-                st.download_button("Download TXT", text, file_name="output.txt")
-            elif output=="PDF":
-                pdf = convert_text_to_pdf(text)
-                st.download_button("Download PDF", pdf, file_name="output.pdf")
+                st.download_button("Download TXT", text, file_name=file.name.replace(ext,"txt"))
             elif output=="DOCX":
-                from docx import Document
-                doc = Document()
-                doc.add_paragraph(text)
-                buf = io.BytesIO()
-                doc.save(buf)
-                st.download_button("Download DOCX", buf.getvalue(), file_name="output.docx")
-    if st.button("Back"): st.session_state.page="menu"
+                buf = convert_txt_to_docx(text)
+                st.download_button("Download DOCX", buf, file_name=file.name.replace(ext,"docx"))
+            elif output=="PDF":
+                buf = convert_txt_to_pdf(text)
+                st.download_button("Download PDF", buf, file_name=file.name.replace(ext,"pdf"))
+        else:
+            st.warning("Upload a file first")
+
+    if st.button("Back"):
+        st.session_state.page="menu"
 
 
 # ===================== PLAGIARISM CHECKER =====================
@@ -441,7 +474,7 @@ elif st.session_state.page=="resume":
     file = st.file_uploader("Upload Resume (PDF/DOCX):", type=["pdf","docx"])
     if st.button("Analyze Resume"):
         if file:
-            ext = file.name.split(".")[-1]
+            ext = file.name.split(".")[-1].lower()
             if ext=="pdf":
                 txt = pdf_to_text(file)
             else:
