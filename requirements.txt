@@ -8,7 +8,6 @@ docx2txt
 reportlab
 pypdf
 nltk
-spacy
 fuzzywuzzy
 python-Levenshtein
 scikit-learn
