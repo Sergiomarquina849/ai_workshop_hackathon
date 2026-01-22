@@ -18,11 +18,7 @@ import nltk
 from fuzzywuzzy import fuzz
 nltk.download('punkt')
 
-import spacy
-nlp = spacy.load("en_core_web_sm")
-
 from sklearn.feature_extraction.text import TfidfVectorizer
-
 
 # ===================== FUTURISTIC UI THEME =====================
 def inject_css():
@@ -127,10 +123,7 @@ Analyze and summarize this website in bullet points covering:
 Content:
 \"\"\"{text}\"\"\"
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
+    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
     return r.choices[0].message.content
 
 
@@ -154,10 +147,7 @@ Compare these two websites based on:
 === WEBSITE B ===
 {B}
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
+    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
     return r.choices[0].message.content
 
 
@@ -173,15 +163,12 @@ def summarize_text(text, client):
     prompt = f"""
 Summarize this content into:
 - Bullet key points
-- 5-10 line paragraph summary
+- 5-10 line summary
 
 Content:
 \"\"\"{text}\"\"\"
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
+    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
     return r.choices[0].message.content
 
 
@@ -202,13 +189,12 @@ def convert_text_to_pdf(text):
 # ===================== FREE WEB PLAGIARISM CHECKER =====================
 def free_web_plagiarism_check(text, client):
     sentences = nltk.sent_tokenize(text)
-    queries = sentences[:3]  # first 3 sentences
+    queries = sentences[:3]
 
     matches = []
 
     for q in queries:
-        query = requests.utils.quote(q)
-        url = f"https://duckduckgo.com/html/?q={query}"
+        url = f"https://duckduckgo.com/html/?q={requests.utils.quote(q)}"
         r = requests.get(url, headers={"User-Agent":"Mozilla/5.0"})
         soup = BeautifulSoup(r.text, "html.parser")
 
@@ -234,17 +220,18 @@ Return:
 - Unique content
 - Final assessment
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
+    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
     return r.choices[0].message.content
 
 
-# ===================== RESUME ANALYZER =====================
+# ===================== RESUME ANALYZER (NO SPACY) =====================
 def extract_skills(text):
-    db = ["Python","Java","C","C++","JavaScript","SQL","HTML","CSS","ML","AI","Communication","Teamwork"]
-    return [s for s in db if s.lower() in text.lower()]
+    skills_db = [
+        "python","java","c","c++","javascript","sql","html","css",
+        "machine learning","deep learning","communication","teamwork",
+        "ai","ml","docker","react","node","linux","cloud","devops","flask"
+    ]
+    return [s for s in skills_db if s.lower() in text.lower()]
 
 def analyze_resume(text, client):
     skills = extract_skills(text)
@@ -253,17 +240,14 @@ Analyze this resume and provide:
 - ATS Score (0-100)
 - Strengths
 - Weaknesses
-- Recommended Improvements
+- Suggested Improvements
 - Suitable Roles
 - Detected Skills: {skills}
 
 Resume:
 \"\"\"{text}\"\"\"
 """
-    r = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role":"user","content":prompt}]
-    )
+    r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
     return r.choices[0].message.content
 
 
@@ -444,7 +428,7 @@ elif st.session_state.page=="plag":
     content = st.text_area("Paste text:")
     if st.button("Check Plagiarism"):
         if content.strip():
-            with st.spinner("Searching the web..."):
+            with st.spinner("Scanning the web for similarities..."):
                 st.write(free_web_plagiarism_check(content, client))
         else:
             st.warning("Enter content first")
