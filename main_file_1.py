@@ -86,7 +86,6 @@ def extract_visible_text(html):
 def analyze_website(url, client):
     response = requests.get(url, timeout=10)
     text = extract_visible_text(response.text)[:6000]
-
     prompt = f"""
 Summarize this website:
 - Purpose
@@ -97,7 +96,6 @@ Summarize this website:
 Content:
 \"\"\"{text}\"\"\"
 """
-
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}]
@@ -109,7 +107,6 @@ Content:
 def compare_websites(url1, url2, client):
     A = extract_visible_text(requests.get(url1).text)[:5000]
     B = extract_visible_text(requests.get(url2).text)[:5000]
-
     prompt = f"""
 Compare these two websites:
 - Purpose
@@ -124,7 +121,6 @@ SITE A:
 SITE B:
 {B}
 """
-
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}]
@@ -167,26 +163,26 @@ def extract_skills(text):
     skills_db = ["python","java","c","c++","javascript","sql","html","css","machine learning","deep learning","communication","teamwork","ai","ml","docker","react","node","linux","cloud","devops","flask"]
     return [s for s in skills_db if s.lower() in text.lower()]
 
+
 def analyze_resume(text, client):
     skills = extract_skills(text)
     prompt = f"""
-Analyze this resume strictly in JSON with:
-- score: ATS score 0-100
-- strengths: list
-- weaknesses: list
-- roles: list
+Analyze this resume and return structured sections:
 
-Resume:
+ATS SCORE (0-100)
+SKILLS FOUND: {skills}
+STRENGTHS:
+WEAKNESSES:
+SUITABLE ROLES:
+
+Resume Content:
 \"\"\"{text}\"\"\"
 """
     r = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role":"user","content":prompt}]
     )
-    try:
-        return json.loads(r.choices[0].message.content)
-    except:
-        return None
+    return r.choices[0].message.content
 
 
 # ===================== STREAMLIT APP =====================
@@ -355,20 +351,9 @@ elif st.session_state.page=="resume":
         if file:
             ext = file.name.split(".")[-1].lower()
             text = pdf_to_text(file) if ext=="pdf" else docx2txt.process(file)
-            data = analyze_resume(text, client)
-            if data:
-                score = int(data.get("score", 0))
-                st.subheader("📊 ATS Score")
-                st.progress(score/100)
-                st.write(f"**Score:** {score}/100")
-                st.subheader("💪 Strengths")
-                st.write(data.get("strengths", []))
-                st.subheader("⚠ Weaknesses")
-                st.write(data.get("weaknesses", []))
-                st.subheader("🎯 Suitable Job Roles")
-                st.write(data.get("roles", []))
-            else:
-                st.error("Could not parse resume.")
+            result = analyze_resume(text, client)
+            st.subheader("📝 Analysis Result")
+            st.write(result)
         else:
             st.warning("Upload resume first")
     if st.button("Back"): st.session_state.page="menu"
