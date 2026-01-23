@@ -15,61 +15,160 @@ from reportlab.lib.styles import getSampleStyleSheet
 from PIL import Image
 
 
-# ===================== THEME =====================
+# ===================== THEME CSS =====================
 def inject_css():
     st.markdown("""
     <style>
+
+    /* ================================================================== */
+    /*                           GLOBAL BACKGROUND                        */
+    /* ================================================================== */
     body {
-        background: linear-gradient(135deg, #0a0f26, #120a35, #1a0f50);
-        background-size: 300% 300%;
-        animation: bgShift 12s ease infinite;
+        background: radial-gradient(circle at top, #1a074b, #080315 70%);
         color: #E4E4F1 !important;
         font-family: 'Poppins', sans-serif;
+        overflow-x: hidden;
     }
-    @keyframes bgShift {
-        0% {background-position: 0% 50%;}
-        50% {background-position: 100% 50%;}
-        100% {background-position: 0% 50%;}
+
+    /* Floating particles */
+    body::before {
+        content: "";
+        position: fixed;
+        top:0; left:0;
+        width:100%; height:100%;
+        background-image:
+            radial-gradient(2px 2px at 20% 30%, #ffffff55, transparent),
+            radial-gradient(1px 1px at 60% 70%, #ffffff33, transparent),
+            radial-gradient(2px 2px at 80% 20%, #ffffff44, transparent);
+        background-repeat: no-repeat;
+        animation: particleMove 18s infinite linear;
+        pointer-events:none;
+        z-index:-1;
     }
+    @keyframes particleMove {
+        0% { transform: translateY(0px); }
+        100% { transform: translateY(-1500px); }
+    }
+
+    /* ================================================================== */
+    /*                             LOGO (HG)                              */
+    /* ================================================================== */
+    .logo-container {
+        width: 260px;
+        height: 260px;
+        margin: auto;
+        position: relative;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        animation: floatLogo 4s ease-in-out infinite alternate;
+    }
+
+    /* Floating animation */
+    @keyframes floatLogo {
+        0%   { transform: translateY(0px) rotate(0deg); }
+        100% { transform: translateY(-16px) rotate(3deg); }
+    }
+
+    .logo {
+        width: 100%;
+        height: 100%;
+        border-radius: 30px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-family: 'Montserrat', monospace;
+        font-weight: bold;
+        font-size: 85px;
+        letter-spacing: 10px;
+        color: #ffffff;
+        text-shadow:0 0 18px #b087ff;
+        background: rgba(255,255,255,0.07);
+        border: 2px solid rgba(255,255,255,0.25);
+        box-shadow: 0 0 40px rgba(131, 70, 255, 0.7);
+        backdrop-filter: blur(14px);
+        animation: logoGlowPulse 3s infinite alternate;
+    }
+
+    @keyframes logoGlowPulse {
+        0%   { box-shadow: 0 0 22px #764bff; }
+        100% { box-shadow: 0 0 48px #9e71ff; }
+    }
+
+    .welcome-title {
+        text-align:center;
+        margin-top: 18px;
+        font-size: 28px;
+        color:#d0c8ff;
+        text-shadow:0 0 9px #9f6bff;
+        animation: fadeInUp 1.2s ease;
+    }
+
+    .welcome-tagline {
+        text-align:center;
+        margin-top: 6px;
+        color:#a789ff;
+        font-size:17px;
+        opacity:0.85;
+        animation: fadeInUp 1.8s ease;
+    }
+
+    @keyframes fadeInUp {
+        from {opacity:0; transform:translateY(20px);}
+        to   {opacity:1; transform:translateY(0);}
+    }
+
+    /* ================================================================== */
+    /*                              CARDS                                 */
+    /* ================================================================== */
     .feature-card {
         backdrop-filter: blur(12px);
         border-radius: 20px;
-        padding: 32px;
+        padding: 28px;
         text-align: center;
         color: #E6E6FA;
         font-weight: 600;
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         border: 2px solid rgba(255,255,255,0.18);
         background: rgba(255,255,255,0.08);
-        box-shadow: 0 0 25px rgba(99, 70, 255, 0.4);
+        box-shadow: 0 0 25px rgba(111, 70, 255, 0.4);
         transition: 0.4s;
         cursor: pointer;
     }
     .feature-card:hover {
         transform: scale(1.06) translateY(-6px);
-        box-shadow: 0 0 35px rgba(137, 98, 255, 0.8);
+        box-shadow: 0 0 35px rgba(157, 98, 255, 0.8);
     }
-    textarea, .stTextInput>div>div>input {
-        background:rgba(255,255,255,0.15)!important;
-        border-radius:10px!important;
-        color:#E6E6FA!important;
-        border:1px solid rgba(255,255,255,0.3)!important;
-    }
+
+    /* ================================================================== */
+    /*                             BUTTONS                                */
+    /* ================================================================== */
     .stButton>button {
         background: linear-gradient(135deg,#6D28D9,#4C1D95);
         color:white;
-        padding:10px 22px;
-        border-radius:10px;
+        padding:12px 26px;
+        border-radius:12px;
         border:none;
-        font-size:14px;
+        font-size:16px;
         font-weight:600;
-        box-shadow:0 0 12px rgba(139,92,246,0.8);
+        box-shadow:0 0 15px rgba(139,92,246,0.8);
         transition:0.3s;
     }
     .stButton>button:hover {
         transform:translateY(-3px) scale(1.03);
-        box-shadow:0 0 18px rgba(167,139,250,1);
+        box-shadow:0 0 22px rgba(167,139,250,1);
     }
+
+    /* ================================================================== */
+    /*                            INPUT FIELDS                            */
+    /* ================================================================== */
+    textarea, .stTextInput>div>div>input {
+        background:rgba(255,255,255,0.12)!important;
+        border-radius:10px!important;
+        color:#E6E6FA!important;
+        border:1px solid rgba(255,255,255,0.3)!important;
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -160,9 +259,10 @@ def convert_txt_to_pdf(text):
 
 # ===================== RESUME ANALYZER =====================
 def extract_skills(text):
-    skills_db = ["python","java","c","c++","javascript","sql","html","css","machine learning","deep learning","communication","teamwork","ai","ml","docker","react","node","linux","cloud","devops","flask"]
+    skills_db = ["python","java","c","c++","javascript","sql","html","css",
+                 "machine learning","deep learning","communication","teamwork",
+                 "ai","ml","docker","react","node","linux","cloud","devops","flask"]
     return [s for s in skills_db if s.lower() in text.lower()]
-
 
 def analyze_resume(text, client):
     skills = extract_skills(text)
@@ -185,28 +285,32 @@ Resume Content:
     return r.choices[0].message.content
 
 
-# ===================== STREAMLIT APP =====================
+# ===================== APP START =====================
 st.set_page_config(page_title="Honnagiri Multi Tool", page_icon="🚀", layout="wide")
 inject_css()
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-if "page" not in st.session_state: st.session_state.page="welcome"
-if "chat_history" not in st.session_state: st.session_state.chat_history=[]
+if "page" not in st.session_state:
+    st.session_state.page="welcome"
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history=[]
 
 
-# ===================== ROUTING =====================
-
-# WELCOME
+# ===================== WELCOME PAGE =====================
 if st.session_state.page=="welcome":
-    st.title("🌌 Welcome to Honnagiri Universe Tools")
-    if st.button("🚀 Enter"): st.session_state.page="menu"
+    st.markdown("<div class='logo-container'><div class='logo'>HG</div></div>", unsafe_allow_html=True)
+    st.markdown("<div class='welcome-title'>Honnagiri Galaxy Tools</div>", unsafe_allow_html=True)
+    st.markdown("<div class='welcome-tagline'>Explore. Create. Analyze. Convert — all in one universe.</div>", unsafe_allow_html=True)
+
+    st.write("")
+    if st.button("🚀 Enter the Galaxy"):
+        st.session_state.page="menu"
 
 
-# MENU
+# ===================== MENU =====================
 elif st.session_state.page=="menu":
     st.title("🪐 Choose Your Tool")
 
-    # Row 1
     c1,c2,c3 = st.columns(3)
     with c1:
         st.markdown("<div class='feature-card'>🤖<br>Chatbot</div>", unsafe_allow_html=True)
@@ -218,7 +322,6 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>🌍<br>Website Analyzer</div>", unsafe_allow_html=True)
         if st.button("Analyze Site"): st.session_state.page="analyzer"
 
-    # Row 2
     c4,c5,c6 = st.columns(3)
     with c4:
         st.markdown("<div class='feature-card'>🖼<br>Text → Image</div>", unsafe_allow_html=True)
@@ -230,7 +333,6 @@ elif st.session_state.page=="menu":
         st.markdown("<div class='feature-card'>📄<br>PDF/Text Summarizer</div>", unsafe_allow_html=True)
         if st.button("Summarize PDF/TXT"): st.session_state.page="pdf_summary"
 
-    # Row 3
     c7,c8 = st.columns(2)
     with c7:
         st.markdown("<div class='feature-card'>🔁<br>File Converter</div>", unsafe_allow_html=True)
@@ -242,7 +344,7 @@ elif st.session_state.page=="menu":
     if st.button("🔙 Exit"): st.session_state.page="welcome"
 
 
-# CHATBOT
+# ===================== CHATBOT =====================
 elif st.session_state.page=="chatbot":
     st.title("🤖 Chatbot")
     msg = st.text_input("Your message:")
@@ -255,7 +357,7 @@ elif st.session_state.page=="chatbot":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# CONTENT GENERATOR
+# ===================== CONTENT GENERATOR =====================
 elif st.session_state.page=="content":
     st.title("📝 Content Generator")
     topic = st.text_input("Topic:")
@@ -267,7 +369,7 @@ elif st.session_state.page=="content":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# WEBSITE ANALYZER
+# ===================== WEBSITE ANALYZER =====================
 elif st.session_state.page=="analyzer":
     st.title("🌍 Website Analyzer")
     url = st.text_input("Website URL:")
@@ -276,7 +378,7 @@ elif st.session_state.page=="analyzer":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# TEXT → IMAGE
+# ===================== TEXT → IMAGE =====================
 elif st.session_state.page=="image":
     st.title("🖼 Text → Image Generator")
     prompt = st.text_input("Describe image:")
@@ -291,7 +393,7 @@ elif st.session_state.page=="image":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# WEBSITE COMPARATOR
+# ===================== WEBSITE COMPARATOR =====================
 elif st.session_state.page=="compare2":
     st.title("📊 Website Comparator")
     u1 = st.text_input("Website 1:")
@@ -301,7 +403,7 @@ elif st.session_state.page=="compare2":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# PDF/TEXT SUMMARIZER
+# ===================== PDF/TEXT SUMMARIZER =====================
 elif st.session_state.page=="pdf_summary":
     st.title("📄 PDF / Text Summarizer")
     file = st.file_uploader("Upload PDF or TXT:", type=["pdf","txt"])
@@ -316,14 +418,17 @@ elif st.session_state.page=="pdf_summary":
             extracted = text_input
         if extracted.strip():
             prompt = f"Summarize this:\n{extracted}"
-            r = client.chat.completions.create(model="llama-3.3-70b-versatile",messages=[{"role":"user","content":prompt}])
+            r = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role":"user","content":prompt}]
+            )
             st.write(r.choices[0].message.content)
         else:
             st.warning("No text found")
     if st.button("Back"): st.session_state.page="menu"
 
 
-# FILE CONVERTER
+# ===================== FILE CONVERTER =====================
 elif st.session_state.page=="converter":
     st.title("🔁 Universal File Converter")
     file = st.file_uploader("Upload file:", type=["pdf","docx","txt"])
@@ -343,7 +448,7 @@ elif st.session_state.page=="converter":
     if st.button("Back"): st.session_state.page="menu"
 
 
-# RESUME ANALYZER
+# ===================== RESUME ANALYZER =====================
 elif st.session_state.page=="resume":
     st.title("📑 Resume Analyzer")
     file = st.file_uploader("Upload Resume (PDF/DOCX):", type=["pdf","docx"])
